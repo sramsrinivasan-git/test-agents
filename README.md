@@ -6,7 +6,7 @@ as a set of tools an MCP client (e.g. Claude) can call to query and summarize lo
 ## Layout
 
 ```
-mc_servers/
+mcp_servers/
   gcp_log_analyzer/
     server.py          # FastMCP entrypoint, registers every tool
     common.py          # shared helpers (client, project resolution, filters)
@@ -50,7 +50,7 @@ The service account / user needs the `roles/logging.viewer` role
 ## Run
 
 ```bash
-python -m mc_servers.gcp_log_analyzer.server
+python -m mcp_servers.gcp_log_analyzer.server
 # or, after `pip install -e .`:
 gcp-log-analyzer-mcp
 ```
@@ -59,7 +59,7 @@ Configure your MCP client to launch this process via stdio.
 
 ## Adding a new tool
 
-1. Create `mc_servers/gcp_log_analyzer/tools/my_tool.py` with a single function
+1. Create `mcp_servers/gcp_log_analyzer/tools/my_tool.py` with a single function
    and a detailed docstring (purpose, when-to-use, args, returns).
 2. Import and append it to `ALL_TOOLS` in `tools/__init__.py`.
 3. `server.py` registers it automatically.
