@@ -7,20 +7,28 @@ FastMCP server exposing Google Cloud Logging as a set of tools an MCP client
 
 ```
 mcp_servers/gcp_log_analyzer/
-├── pyproject.toml              # this package's deps + console script
-├── README.md                   # you are here
-└── src/mcp_servers/gcp_log_analyzer/
+├── pyproject.toml          # this package's deps + console script
+├── README.md               # you are here
+├── tests/                  # tests for this server
+└── src/                    # the package contents (importable as `gcp_log_analyzer`)
     ├── __init__.py
-    ├── server.py               # FastMCP entrypoint, registers every tool
-    ├── gcp.py                  # shared helpers (client, filters, normalization)
-    └── tools/                  # one file per MCP tool
-        ├── __init__.py         # exports ALL_TOOLS
+    ├── server.py           # FastMCP entrypoint, registers every tool
+    ├── common.py           # shared helpers (client, filters, normalization)
+    └── tools/              # one file per MCP tool
+        ├── __init__.py     # exports ALL_TOOLS
         ├── query_logs.py
         ├── recent_errors.py
         ├── summarize_errors.py
         ├── severity_histogram.py
         ├── list_log_names.py
         └── top_error_messages.py
+```
+
+The package name is `gcp_log_analyzer` (set in `pyproject.toml` via
+`package-dir`), so imports look like:
+
+```python
+from gcp_log_analyzer.tools import recent_errors
 ```
 
 ## Tools
@@ -58,14 +66,20 @@ for data-access logs).
 ```bash
 uv run gcp-log-analyzer-mcp
 # or
-uv run python -m mcp_servers.gcp_log_analyzer.server
+uv run python -m gcp_log_analyzer.server
+```
+
+## Test
+
+```bash
+uv run pytest mcp_servers/gcp_log_analyzer/tests/
 ```
 
 ## Adding a new tool
 
-1. Create `src/mcp_servers/gcp_log_analyzer/tools/my_tool.py` with a single
-   function and a detailed docstring (purpose, when-to-use, args, returns).
-2. Import it and append to `ALL_TOOLS` in `tools/__init__.py`.
+1. Create `src/tools/my_tool.py` with a single function and a detailed
+   docstring (purpose, when-to-use, args, returns).
+2. Import it and append to `ALL_TOOLS` in `src/tools/__init__.py`.
 3. `server.py` registers it automatically on the next start.
 
 ## Filter examples

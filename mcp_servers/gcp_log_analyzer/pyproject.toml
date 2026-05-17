@@ -9,13 +9,15 @@ dependencies = [
 ]
 
 [project.scripts]
-gcp-log-analyzer-mcp = "mcp_servers.gcp_log_analyzer.server:main"
+gcp-log-analyzer-mcp = "gcp_log_analyzer.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["mcp_servers.gcp_log_analyzer*"]
-namespaces = true
+# The folder `src/` IS the `gcp_log_analyzer` package — no inner directory
+# named after the package. `package-dir` tells setuptools to expose the
+# contents of `src/` under the import name `gcp_log_analyzer`.
+[tool.setuptools]
+package-dir = { "gcp_log_analyzer" = "src" }
+packages = ["gcp_log_analyzer", "gcp_log_analyzer.tools"]

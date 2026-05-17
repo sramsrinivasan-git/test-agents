@@ -12,7 +12,7 @@ AaaS-repo/
 ├── mcp_servers/             # one folder per MCP server, each with its own pyproject.toml
 │   └── gcp_log_analyzer/
 ├── common/                  # repo-wide shared code
-├── tests/                   # tests for everything (mirrors the source tree)
+├── tests/                   # repo-wide tests (each package also has its own tests/)
 ├── infra/
 ├── docs/
 ├── pyproject.toml           # workspace root (this file)
