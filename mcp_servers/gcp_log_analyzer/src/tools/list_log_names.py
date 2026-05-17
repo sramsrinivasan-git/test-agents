@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from google.cloud import logging_v2
-
 from ..common import get_client, resolve_project
 
 
@@ -33,6 +31,5 @@ def list_log_names(project_id: str | None = None) -> dict[str, Any]:
     """
     project = resolve_project(project_id)
     client = get_client()
-    request = logging_v2.ListLogsRequest(parent=f"projects/{project}")
-    names = [name for name in client.list_logs(request=request)]
+    names = list(client.list_logs(request={"parent": f"projects/{project}"}))
     return {"project_id": project, "count": len(names), "log_names": names}
