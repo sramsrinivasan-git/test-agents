@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..common import DEFAULT_PAGE_SIZE, list_entries, resolve_project, time_filter
+from gcp_log_analyzer.common import DEFAULT_PAGE_SIZE, list_entries, resolve_project, time_filter
 
 
 def recent_errors(

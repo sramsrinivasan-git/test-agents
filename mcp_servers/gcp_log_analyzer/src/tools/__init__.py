@@ -5,12 +5,12 @@ responsible for registering them with the FastMCP instance, so the tools
 themselves remain framework-agnostic and unit-testable.
 """
 
-from .list_log_names import list_log_names
-from .query_logs import query_logs
-from .recent_errors import recent_errors
-from .severity_histogram import severity_histogram
-from .summarize_errors import summarize_errors
-from .top_error_messages import top_error_messages
+from gcp_log_analyzer.tools.list_log_names import list_log_names
+from gcp_log_analyzer.tools.query_logs import query_logs
+from gcp_log_analyzer.tools.recent_errors import recent_errors
+from gcp_log_analyzer.tools.severity_histogram import severity_histogram
+from gcp_log_analyzer.tools.summarize_errors import summarize_errors
+from gcp_log_analyzer.tools.top_error_messages import top_error_messages
 
 ALL_TOOLS = [
     query_logs,

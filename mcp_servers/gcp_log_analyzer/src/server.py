@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
-from .tools import ALL_TOOLS
+from gcp_log_analyzer.tools import ALL_TOOLS
 
 mcp = FastMCP("gcp-log-analyzer")
 

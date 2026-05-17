@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..common import get_client, resolve_project
+from gcp_log_analyzer.common import get_client, resolve_project
 
 
 def list_log_names(project_id: str | None = None) -> dict[str, Any]:
