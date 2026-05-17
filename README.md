@@ -3,6 +3,26 @@
 A [FastMCP](https://github.com/jlowin/fastmcp) server that exposes Google Cloud Logging
 as a set of tools an MCP client (e.g. Claude) can call to query and summarize logs.
 
+## Layout
+
+```
+mc_servers/
+  gcp_log_analyzer/
+    server.py          # FastMCP entrypoint, registers every tool
+    common.py          # shared helpers (client, project resolution, filters)
+    tools/
+      __init__.py      # exports ALL_TOOLS
+      query_logs.py
+      recent_errors.py
+      summarize_errors.py
+      severity_histogram.py
+      list_log_names.py
+      top_error_messages.py
+```
+
+Each tool is a plain function in its own module; `server.py` registers them with
+the FastMCP instance. This keeps tools framework-agnostic and unit-testable.
+
 ## Tools
 
 - `query_logs(filter, project_id?, page_size?, order_by?)` — run a raw Cloud Logging
@@ -21,7 +41,6 @@ as a set of tools an MCP client (e.g. Claude) can call to query and summarize lo
 ```bash
 pip install -e .
 export GOOGLE_CLOUD_PROJECT=your-project-id
-# Authenticate with Application Default Credentials
 gcloud auth application-default login
 ```
 
@@ -31,10 +50,19 @@ The service account / user needs the `roles/logging.viewer` role
 ## Run
 
 ```bash
-python server.py
+python -m mc_servers.gcp_log_analyzer.server
+# or, after `pip install -e .`:
+gcp-log-analyzer-mcp
 ```
 
 Configure your MCP client to launch this process via stdio.
+
+## Adding a new tool
+
+1. Create `mc_servers/gcp_log_analyzer/tools/my_tool.py` with a single function
+   and a detailed docstring (purpose, when-to-use, args, returns).
+2. Import and append it to `ALL_TOOLS` in `tools/__init__.py`.
+3. `server.py` registers it automatically.
 
 ## Filter examples
 
