@@ -6,7 +6,7 @@ from typing import Any
 
 from google.cloud import logging_v2
 
-from ..common import get_client, resolve_project
+from ..gcp import get_client, resolve_project
 
 
 def list_log_names(project_id: str | None = None) -> dict[str, Any]:

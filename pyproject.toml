@@ -1,19 +1,11 @@
 [project]
-name = "gcp-log-analyzer-mcp"
-version = "0.1.0"
-description = "FastMCP server exposing Google Cloud Logging analysis tools."
+name = "aaas-workspace"
+version = "0.0.0"
+description = "AaaS monorepo workspace root."
 requires-python = ">=3.10"
-dependencies = [
-    "fastmcp>=0.2.0",
-    "google-cloud-logging>=3.10.0",
+
+[tool.uv.workspace]
+members = [
+    "mcp_servers/*",
+    # "agents/*",   # uncomment once agents/<name>/pyproject.toml exist
 ]
-
-[project.scripts]
-gcp-log-analyzer-mcp = "mcp_servers.gcp_log_analyzer.server:main"
-
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["mcp_servers*"]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..common import DEFAULT_PAGE_SIZE, list_entries, resolve_project
+from ..gcp import DEFAULT_PAGE_SIZE, list_entries, resolve_project
 
 
 def query_logs(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from ..common import MAX_PAGE_SIZE, list_entries, resolve_project, time_filter
+from ..gcp import MAX_PAGE_SIZE, list_entries, resolve_project, time_filter
 
 
 def top_error_messages(

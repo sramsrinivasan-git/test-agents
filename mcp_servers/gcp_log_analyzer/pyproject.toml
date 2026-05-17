@@ -1,0 +1,21 @@
+[project]
+name = "aaas-mcp-server-gcp-log-analyzer"
+version = "0.1.0"
+description = "FastMCP server exposing Google Cloud Logging analysis tools."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=0.2.0",
+    "google-cloud-logging>=3.10.0",
+]
+
+[project.scripts]
+gcp-log-analyzer-mcp = "mcp_servers.gcp_log_analyzer.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mcp_servers.gcp_log_analyzer*"]
+namespaces = true
