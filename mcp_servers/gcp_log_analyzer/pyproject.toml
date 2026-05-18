@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FastMCP server exposing Google Cloud Logging analysis tools."
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=0.2.0",
+    "fastmcp>=2.0",
     "google-cloud-logging>=3.10.0",
 ]
 
