@@ -64,6 +64,29 @@ gcloud projects add-iam-policy-binding "$LOGS_PROJECT" \
 
 For data-access logs, use `roles/logging.privateLogViewer` instead.
 
+## 3b. Grant Cloud Build IAM (one-time, easy to miss)
+
+`gcloud run deploy --source` builds the container with Cloud Build, which
+runs as the project's **Compute Engine default service account** in
+projects created after mid-2024. That SA doesn't have build permissions
+by default — without this grant the first deploy fails with:
+
+> `<num>-compute@developer.gserviceaccount.com does not have storage.objects.get access to the google cloud storage object`
+
+Fix it once:
+
+```bash
+PROJECT_NUMBER=$(gcloud projects describe "$HOST_PROJECT" --format='value(projectNumber)')
+COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding "$HOST_PROJECT" \
+  --member="serviceAccount:${COMPUTE_SA}" \
+  --role="roles/cloudbuild.builds.builder"
+```
+
+That role bundles staging-bucket read/write, build logging, and Artifact
+Registry push — i.e. everything `gcloud run deploy --source` needs.
+
 ## 4. Deploy to Cloud Run from source
 
 Run this from the repo root (one level above `mcp_servers/`):
@@ -120,19 +143,49 @@ gcloud run services add-iam-policy-binding "$SERVICE" \
 ## 6. Smoke-test the deployed server
 
 ```bash
-# Get an identity token for yourself
 TOKEN=$(gcloud auth print-identity-token)
-
-# Hit the MCP HTTP endpoint
 SERVICE_URL=$(gcloud run services describe "$SERVICE" \
   --project="$HOST_PROJECT" --region="$REGION" \
   --format='value(status.url)')
-
-curl -sS -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/mcp"
 ```
 
-You should get an MCP protocol response (not a 401/403). If you see HTML
-or a 403, the IAM binding from step 5 didn't take.
+The streamable-http transport requires the client to advertise that it
+can receive SSE chunks. A bare `curl` without the right `Accept` header
+gets back `Not Acceptable: Client must accept text/event-stream` — which
+*is* a healthy server response, just an unhappy client.
+
+Liveness check (server is up + auth works):
+
+```bash
+curl -sS -i \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json, text/event-stream" \
+  "$SERVICE_URL/mcp"
+```
+
+Real protocol handshake (proves MCP is actually working end-to-end):
+
+```bash
+curl -sS -i \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" \
+  -X POST "$SERVICE_URL/mcp" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "curl", "version": "0"}
+    }
+  }'
+```
+
+Expect a JSON-RPC response with server info and capabilities. A 401/403
+means the `roles/run.invoker` binding from step 5 didn't take; a 404
+means try `/sse` instead of `/mcp`.
 
 ## 7. Connect your MCP client
 
