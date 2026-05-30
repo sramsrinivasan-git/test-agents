@@ -1,0 +1,23 @@
+[project]
+name = "aaas-mcp-server-gcp-cloud-asset"
+version = "0.1.0"
+description = "FastMCP server exposing Google Cloud Asset API tools."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0",
+    "google-cloud-asset>=3.24.0",
+]
+
+[project.scripts]
+gcp-cloud-asset-mcp = "gcp_cloud_asset.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# `src/` IS the `gcp_cloud_asset` package — no inner directory named after
+# the package. `package-dir` tells setuptools to expose the contents of
+# `src/` under the import name `gcp_cloud_asset`.
+[tool.setuptools]
+package-dir = { "gcp_cloud_asset" = "src" }
+packages = ["gcp_cloud_asset", "gcp_cloud_asset.tools"]
