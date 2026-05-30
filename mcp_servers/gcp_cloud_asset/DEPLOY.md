@@ -50,27 +50,40 @@ gcloud iam service-accounts create "$SA_NAME" \
   --display-name="GCP Cloud Asset MCP Server"
 ```
 
-## 3. Grant the service account read access to assets
+## 3. Grant the service account read access to assets and logs
 
-The Cloud Run service is deployed **once**, but you repeat this step for every
-project you want the server to be able to analyze. No redeployment needed —
-just add the IAM binding on the new project.
+The Cloud Run service is deployed **once**. You repeat this step for every
+project you want the server to be able to analyze — no redeployment needed.
+
+Two roles are required per project:
+
+| Role | Purpose |
+|---|---|
+| `roles/cloudasset.viewer` | Read Cloud Asset Inventory (resources, IAM policies, history) |
+| `roles/logging.viewer` | Read Cloud Logging runtime logs |
+
+Use `roles/logging.privateLogViewer` instead of `roles/logging.viewer` if you
+also need data-access audit logs.
 
 **Single project:**
 
 ```bash
-gcloud projects add-iam-policy-binding "$ASSET_PROJECT" \
-  --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/cloudasset.viewer"
+for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
+  gcloud projects add-iam-policy-binding "$ASSET_PROJECT" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="$ROLE"
+done
 ```
 
-**Multiple projects** (repeat for each):
+**Multiple projects:**
 
 ```bash
 for PROJECT in project-a project-b project-c; do
-  gcloud projects add-iam-policy-binding "$PROJECT" \
-    --member="serviceAccount:${SA_EMAIL}" \
-    --role="roles/cloudasset.viewer"
+  for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
+    gcloud projects add-iam-policy-binding "$PROJECT" \
+      --member="serviceAccount:${SA_EMAIL}" \
+      --role="$ROLE"
+  done
 done
 ```
 
@@ -78,14 +91,18 @@ done
 large environments):
 
 ```bash
-gcloud resource-manager folders add-iam-policy-binding FOLDER_ID \
-  --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/cloudasset.viewer"
+for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
+  gcloud resource-manager folders add-iam-policy-binding FOLDER_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="$ROLE"
+done
 
 # or at the org level:
-gcloud organizations add-iam-policy-binding ORG_ID \
-  --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/cloudasset.viewer"
+for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
+  gcloud organizations add-iam-policy-binding ORG_ID \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="$ROLE"
+done
 ```
 
 ## 3b. Grant Cloud Build IAM (one-time, easy to miss)
