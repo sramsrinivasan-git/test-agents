@@ -1,8 +1,14 @@
 # Deploying gcp-cloud-asset to Cloud Run
 
-This deploys the MCP server as a Cloud Run service, reachable over HTTPS,
-running as a dedicated service account with `roles/cloudasset.viewer` on the
-scope it will analyze.
+This deploys the MCP server as a **single** Cloud Run service, reachable over
+HTTPS, running as a dedicated service account. The service is deployed once —
+you grant `roles/cloudasset.viewer` separately for each project (or folder/org)
+you want it to be able to analyze.
+
+At runtime the MCP client (e.g. Claude) passes `project_id` or `scope` on each
+tool call to target any project the service account has access to. The
+`GOOGLE_CLOUD_PROJECT` env var set at deploy time is only the **default** used
+when no `project_id` is supplied.
 
 ## Pick your variables
 
@@ -10,8 +16,8 @@ scope it will analyze.
 # Project that HOSTS the Cloud Run service (you pay for compute here).
 export HOST_PROJECT=my-host-project
 
-# Project (or folder/org) whose assets the server will analyze.
-# Often the same as HOST_PROJECT; can be different.
+# Default project whose assets the server will analyze when no project_id is
+# passed by the caller. Can be the same as HOST_PROJECT or different.
 export ASSET_PROJECT=my-asset-project
 
 # Cloud Run region.
@@ -46,15 +52,11 @@ gcloud iam service-accounts create "$SA_NAME" \
 
 ## 3. Grant the service account read access to assets
 
-If `ASSET_PROJECT == HOST_PROJECT`:
+The Cloud Run service is deployed **once**, but you repeat this step for every
+project you want the server to be able to analyze. No redeployment needed —
+just add the IAM binding on the new project.
 
-```bash
-gcloud projects add-iam-policy-binding "$HOST_PROJECT" \
-  --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/cloudasset.viewer"
-```
-
-If assets live in a different project (cross-project):
+**Single project:**
 
 ```bash
 gcloud projects add-iam-policy-binding "$ASSET_PROJECT" \
@@ -62,11 +64,26 @@ gcloud projects add-iam-policy-binding "$ASSET_PROJECT" \
   --role="roles/cloudasset.viewer"
 ```
 
-To analyze assets at a folder or org level, bind the role on the folder/org
-instead:
+**Multiple projects** (repeat for each):
+
+```bash
+for PROJECT in project-a project-b project-c; do
+  gcloud projects add-iam-policy-binding "$PROJECT" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/cloudasset.viewer"
+done
+```
+
+**Entire folder or org** (covers all projects underneath — most convenient for
+large environments):
 
 ```bash
 gcloud resource-manager folders add-iam-policy-binding FOLDER_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/cloudasset.viewer"
+
+# or at the org level:
+gcloud organizations add-iam-policy-binding ORG_ID \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/cloudasset.viewer"
 ```
