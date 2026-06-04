@@ -1,0 +1,11 @@
+[
+  {"name": "alert_id",           "type": "STRING",    "mode": "REQUIRED", "description": "Unique alert ID"},
+  {"name": "run_id",             "type": "STRING",    "mode": "REQUIRED", "description": "FK to audit_runs.run_id"},
+  {"name": "finding_id",         "type": "STRING",    "mode": "REQUIRED", "description": "FK to audit_findings.finding_id"},
+  {"name": "dispatched_at",      "type": "TIMESTAMP", "mode": "REQUIRED", "description": "When the alert was published to Pub/Sub"},
+  {"name": "pubsub_topic",       "type": "STRING",    "mode": "REQUIRED", "description": "Pub/Sub topic the alert was published to"},
+  {"name": "pubsub_message_id",  "type": "STRING",    "mode": "NULLABLE", "description": "Pub/Sub message ID returned on publish"},
+  {"name": "severity",           "type": "STRING",    "mode": "REQUIRED", "description": "low | medium | high | critical"},
+  {"name": "alert_payload",      "type": "JSON",      "mode": "REQUIRED", "description": "Full JSON payload sent to Pub/Sub"},
+  {"name": "downstream_targets", "type": "STRING",    "mode": "REPEATED", "description": "Downstream consumers (e.g. slack, pagerduty, siem)"}
+]

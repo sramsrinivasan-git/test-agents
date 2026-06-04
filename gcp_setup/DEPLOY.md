@@ -171,6 +171,24 @@ gcloud firestore indexes composite list \
 
 ---
 
+## Option C — Terraform (covers all of §1–§3a)
+
+If you'd rather declare the whole thing as code, see
+[`../terraform/`](../terraform/). One `terraform apply` provisions the
+BigQuery dataset + tables, the Firestore database, both composite
+indexes, and the TTL policy.
+
+```bash
+cd ../terraform/
+terraform init
+terraform apply -var "project_id=my-project"
+```
+
+Seeding the implicit Firestore collections (§3b) is still a manual step
+either way — Terraform has no resource for "empty Firestore collection".
+
+---
+
 ## File inventory
 
 | File                                       | What it is                                            |

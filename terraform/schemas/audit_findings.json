@@ -1,0 +1,40 @@
+[
+  {"name": "finding_id",        "type": "STRING",    "mode": "REQUIRED", "description": "Unique finding ID"},
+  {"name": "run_id",            "type": "STRING",    "mode": "REQUIRED", "description": "FK to audit_runs.run_id"},
+  {"name": "trigger_type",      "type": "STRING",    "mode": "REQUIRED", "description": "batch | realtime"},
+  {"name": "found_at",          "type": "TIMESTAMP", "mode": "REQUIRED", "description": "When this finding was detected"},
+  {"name": "detected_by",       "type": "STRING",    "mode": "REQUIRED", "description": "log_analyzer | asset_inspector | agent_behavior_evaluator"},
+
+  {"name": "log_severity",      "type": "STRING",    "mode": "NULLABLE", "description": "Cloud Logging severity: INFO | WARNING | ERROR | CRITICAL"},
+  {"name": "log_method",        "type": "STRING",    "mode": "NULLABLE", "description": "API method (e.g. google.iam.admin.v1.SetIAMPolicy)"},
+  {"name": "log_service",       "type": "STRING",    "mode": "NULLABLE", "description": "GCP service (e.g. iam.googleapis.com)"},
+  {"name": "log_principal",     "type": "STRING",    "mode": "NULLABLE", "description": "Principal email who performed the action"},
+  {"name": "log_resource_name", "type": "STRING",    "mode": "NULLABLE", "description": "Full resource path from Cloud Logging"},
+  {"name": "log_timestamp",     "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Original event timestamp from Cloud Logging"},
+  {"name": "log_raw_json",      "type": "JSON",      "mode": "NULLABLE", "description": "Raw Cloud Logging JSON event"},
+
+  {"name": "asset_type",        "type": "STRING",    "mode": "NULLABLE", "description": "Cloud Asset type (e.g. compute.googleapis.com/Firewall)"},
+  {"name": "asset_name",        "type": "STRING",    "mode": "NULLABLE", "description": "Full asset resource name"},
+  {"name": "asset_project",     "type": "STRING",    "mode": "NULLABLE", "description": "GCP project ID the asset belongs to"},
+  {"name": "asset_iam_role",    "type": "STRING",    "mode": "NULLABLE", "description": "IAM role involved (e.g. roles/owner)"},
+  {"name": "asset_iam_member",  "type": "STRING",    "mode": "NULLABLE", "description": "IAM member (e.g. serviceAccount:sa-deploy@...)"},
+  {"name": "asset_prior_role",  "type": "STRING",    "mode": "NULLABLE", "description": "Previous IAM role (if escalation detected)"},
+  {"name": "asset_snapshot_ts", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp of the Cloud Asset snapshot"},
+  {"name": "asset_raw_json",    "type": "JSON",      "mode": "NULLABLE", "description": "Raw Cloud Asset export JSON"},
+
+  {"name": "agent_id",          "type": "STRING",    "mode": "NULLABLE", "description": "ID of the user-facing agent being monitored"},
+  {"name": "conversation_id",   "type": "STRING",    "mode": "NULLABLE", "description": "Conversation/session ID"},
+  {"name": "agent_user_input",  "type": "STRING",    "mode": "NULLABLE", "description": "What the user asked the agent"},
+  {"name": "agent_response",    "type": "STRING",    "mode": "NULLABLE", "description": "What the agent responded"},
+  {"name": "violation_type",    "type": "STRING",    "mode": "NULLABLE", "description": "hallucination | pii_leak | policy_violation | ungrounded_claim"},
+  {"name": "grounding_sources", "type": "JSON",      "mode": "NULLABLE", "description": "Grounding sources the agent cited"},
+
+  {"name": "policy_ref",        "type": "STRING",    "mode": "NULLABLE", "description": "GCS path to the governance policy doc matched"},
+  {"name": "policy_clause",     "type": "STRING",    "mode": "NULLABLE", "description": "Specific clause/section of the policy violated"},
+  {"name": "verdict",           "type": "STRING",    "mode": "REQUIRED", "description": "clean | violation | ambiguous"},
+  {"name": "verdict_source",    "type": "STRING",    "mode": "REQUIRED", "description": "policy_evaluator | ground_truth:<case_id> | human:<email>"},
+  {"name": "severity",          "type": "STRING",    "mode": "REQUIRED", "description": "low | medium | high | critical"},
+  {"name": "finding_summary",   "type": "STRING",    "mode": "REQUIRED", "description": "Human-readable summary of the finding"},
+
+  {"name": "pattern_key",       "type": "STRING",    "mode": "NULLABLE", "description": "Generalized pattern (e.g. role_grant:roles/editor:staging-*)"}
+]
