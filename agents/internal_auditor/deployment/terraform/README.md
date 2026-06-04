@@ -1,6 +1,6 @@
 # Internal Auditor — Terraform
 
-Creates the same resources as the manual setup under `../gcp_setup/`:
+Creates the same resources as the manual setup under `../../gcp_setup/`:
 
 - BigQuery dataset `internal_auditor` + tables `audit_runs`,
   `audit_findings`, `audit_alerts` (partitioned + clustered).
@@ -8,7 +8,7 @@ Creates the same resources as the manual setup under `../gcp_setup/`:
   composite indexes on `ground_truth_decisions` and a TTL policy on
   `expires_at`.
 
-Pick this path over `../gcp_setup/` when you want reproducible,
+Pick this path over `../../gcp_setup/` when you want reproducible,
 version-controlled infra. Keep the manual scripts for ad-hoc / one-shot
 setup where pulling in Terraform tooling is overkill.
 
@@ -49,7 +49,7 @@ terraform apply \
 - **Collections** in Firestore (`ground_truth_decisions`,
   `schema_registry`) materialize on first write — Terraform doesn't
   create them. To make them visible in the Console explorer, drop a
-  placeholder doc in each (see `../gcp_setup/DEPLOY.md` §3b).
+  placeholder doc in each (see `../../gcp_setup/DEPLOY.md` §3b).
 - **Deletion protection** is on for all BQ tables. To `terraform destroy`,
   set `deletion_protection = false`, `terraform apply`, then destroy.
 - **Schema source of truth**: `schemas/*.json`. Same JSON format the

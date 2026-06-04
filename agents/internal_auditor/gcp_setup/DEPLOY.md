@@ -174,12 +174,12 @@ gcloud firestore indexes composite list \
 ## Option C — Terraform (covers all of §1–§3a)
 
 If you'd rather declare the whole thing as code, see
-[`../terraform/`](../terraform/). One `terraform apply` provisions the
-BigQuery dataset + tables, the Firestore database, both composite
-indexes, and the TTL policy.
+[`../deployment/terraform/`](../deployment/terraform/). One
+`terraform apply` provisions the BigQuery dataset + tables, the
+Firestore database, both composite indexes, and the TTL policy.
 
 ```bash
-cd ../terraform/
+cd ../deployment/terraform/
 terraform init
 terraform apply -var "project_id=my-project"
 ```
