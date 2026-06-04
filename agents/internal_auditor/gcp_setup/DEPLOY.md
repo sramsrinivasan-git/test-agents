@@ -12,6 +12,71 @@ Console flow, and a Cloud Shell script. Pick whichever fits your context.
 
 ---
 
+## 0. Permissions you need on `PROJECT_ID`
+
+Grant these to the human (or service account) that will run the scripts.
+The "minimum" column lists the smallest set of predefined roles that
+covers everything in this doc; the "easy mode" column is a single broad
+role if you don't care about least-privilege for one-off setup.
+
+### BigQuery (§1–§2)
+
+| Action                                | Permission                                  | Minimum role                                    |
+| ------------------------------------- | ------------------------------------------- | ----------------------------------------------- |
+| Create the `internal_auditor` dataset | `bigquery.datasets.create`                  | `roles/bigquery.dataOwner` (project-level)      |
+| Create the 3 tables                   | `bigquery.tables.create` + `.update`        | `roles/bigquery.dataEditor` on the dataset      |
+| Run the CREATE TABLE DDL queries      | `bigquery.jobs.create`                      | `roles/bigquery.jobUser` (project-level)        |
+
+- **Minimum**: `roles/bigquery.dataOwner` + `roles/bigquery.jobUser` at
+  the project level.
+- **Easy mode**: `roles/bigquery.admin` at the project level.
+
+### Firestore (§3a)
+
+| Action                                              | Permission                            | Minimum role                                   |
+| --------------------------------------------------- | ------------------------------------- | ---------------------------------------------- |
+| Enable the Firestore API                            | `serviceusage.services.enable`        | `roles/serviceusage.serviceUsageAdmin`         |
+| Create database `internal-auditor-db`               | `datastore.databases.create`          | `roles/datastore.owner` (project-level)        |
+| Create the 2 composite indexes                      | `datastore.indexes.create`            | `roles/datastore.indexAdmin`                   |
+| Enable TTL on `ground_truth_decisions.expires_at`   | `datastore.databases.update`          | `roles/datastore.owner`                        |
+
+- **Minimum**: `roles/datastore.owner` + `roles/serviceusage.serviceUsageAdmin`.
+- **Easy mode**: `roles/owner` on the project covers all of the above
+  (and everything else — use only in sandboxes).
+
+### Seeding placeholder docs (§3b)
+
+| Action                                       | Permission              | Minimum role                |
+| -------------------------------------------- | ----------------------- | --------------------------- |
+| Write the `_seed` doc into each collection   | `datastore.entities.create` | `roles/datastore.user`  |
+
+Already covered by `roles/datastore.owner` above.
+
+### Granting the roles
+
+```bash
+# Example — replace USER with user:you@example.com or
+# serviceAccount:setup-sa@PROJECT_ID.iam.gserviceaccount.com
+for ROLE in \
+    roles/bigquery.dataOwner \
+    roles/bigquery.jobUser \
+    roles/datastore.owner \
+    roles/serviceusage.serviceUsageAdmin; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$USER" --role="$ROLE"
+done
+```
+
+Or in the Console: IAM & Admin → IAM → **Grant access** → paste the
+principal, add each role, **Save**.
+
+> **If you only have `roles/editor`** on the project: it covers BigQuery
+> table/dataset creation and Firestore reads/writes, but **not**
+> `datastore.databases.create` or `datastore.indexes.create`. You'll need
+> at least `roles/datastore.owner` added on top for §3a.
+
+---
+
 ## 1. BigQuery: dataset `internal_auditor`
 
 ### Option A — Console UI
