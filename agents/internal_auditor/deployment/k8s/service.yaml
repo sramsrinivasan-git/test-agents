@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: internal-auditor
+  namespace: agents
+  labels:
+    app: internal-auditor
+spec:
+  selector:
+    app: internal-auditor
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  # ClusterIP keeps the agent reachable only from inside the cluster.
+  # The Cloud Function trigger reaches it via the in-cluster DNS name
+  # `internal-auditor.agents.svc.cluster.local:8080` over Private Service
+  # Connect, OR via an Ingress / Gateway if you expose it to the VPC.
+  type: ClusterIP
