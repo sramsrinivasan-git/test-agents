@@ -13,7 +13,6 @@ dependencies = [
 ]
 
 [project.scripts]
-internal-auditor = "internal_auditor.main:main"
 internal-auditor-server = "internal_auditor.server:main"
 
 [build-system]

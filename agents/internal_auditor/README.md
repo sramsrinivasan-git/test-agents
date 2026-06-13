@@ -24,7 +24,6 @@ src/internal_auditor/
 ├── log_analyzer.py     log analyzer specialist + MCPToolset
 ├── asset_inspector.py  asset inspector specialist + MCPToolset
 ├── config.py           env-driven config
-├── main.py             CLI entry (internal-auditor)
 └── server.py           FastAPI entry (internal-auditor-server)
 
 tests/test_smoke.py          import-only smoke tests
@@ -49,15 +48,22 @@ kubectl -n mcp-servers port-forward svc/gcp-cloud-asset-mcp  18081:8080 &
 export GCP_LOG_ANALYZER_MCP_URL=http://localhost:18080/mcp
 export GCP_CLOUD_ASSET_MCP_URL=http://localhost:18081/mcp
 
-# One-shot CLI run:
-internal-auditor --lookback-hours 1
+# Interactive UI (ADK Dev UI) — easiest way to drive the agent locally:
+cd agents/internal_auditor/src   # adk web auto-discovers packages in cwd
+adk web                          # opens http://localhost:8000
 
-# Or the HTTP server:
+# Or run the FastAPI server (same surface the GKE Deployment exposes):
 internal-auditor-server
 curl -s -X POST localhost:8080/audit \
   -H 'Content-Type: application/json' \
   -d '{"trigger_type":"batch","lookback_hours":1.0}'
 ```
+
+In the ADK web UI, select `internal_auditor` from the agent picker and
+send a message like:
+> `trigger_type=batch lookback_hours=1 run_id=audit-local-1`
+You'll see the orchestrator fan out to `log_analyzer` + `asset_inspector`
+in parallel and return the merged JSON.
 
 ## Deploy to GKE
 
