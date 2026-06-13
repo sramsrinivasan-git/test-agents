@@ -19,7 +19,7 @@ FastAPI service on **GKE** alongside the MCP server it talks to.
 ## Layout
 
 ```
-src/
+src/internal_auditor/
 ├── agent.py            orchestrator (root_agent); calls specialists as AgentTools
 ├── log_analyzer.py     log analyzer specialist + MCPToolset
 ├── asset_inspector.py  asset inspector specialist + MCPToolset

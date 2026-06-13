@@ -20,8 +20,8 @@ internal-auditor-server = "internal_auditor.server:main"
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-# `src/` IS the `internal_auditor` package. Matches the layout used by
-# mcp_servers/*.
+# Standard src/ layout: the package directory `src/internal_auditor/`
+# is exposed as the import name `internal_auditor`.
 [tool.setuptools]
-package-dir = { "internal_auditor" = "src" }
+package-dir = { "" = "src" }
 packages = ["internal_auditor"]
