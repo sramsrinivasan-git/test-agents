@@ -1,7 +1,7 @@
 [
   {"name": "finding_id",        "type": "STRING",    "mode": "REQUIRED", "description": "Unique finding ID"},
   {"name": "run_id",            "type": "STRING",    "mode": "REQUIRED", "description": "FK to audit_runs.run_id"},
-  {"name": "trigger_type",      "type": "STRING",    "mode": "REQUIRED", "description": "batch | realtime"},
+  {"name": "trigger_type",      "type": "STRING",    "mode": "REQUIRED", "description": "scheduled | on_demand (provenance: how the run was kicked off)"},
   {"name": "found_at",          "type": "TIMESTAMP", "mode": "REQUIRED", "description": "When this finding was detected"},
   {"name": "detected_by",       "type": "STRING",    "mode": "REQUIRED", "description": "log_analyzer | asset_inspector | agent_behavior_evaluator"},
 

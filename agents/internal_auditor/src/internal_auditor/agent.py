@@ -4,8 +4,13 @@ Receives audit triggers, calls specialist agents as tools, returns
 merged findings. In this POC the available specialists are
 `log_analyzer` and `asset_inspector`.
 
+trigger_type is provenance only ("scheduled" = Cloud Scheduler cron,
+"on_demand" = ad-hoc API call). Both run the same workflow; the field
+is carried through to the output so downstream consumers (BQ, dashboards)
+can tell scheduled audits from on-demand ones.
+
 Out of scope on purpose (deferred to later phases per plan.md):
-- Agent Behavior Evaluator (real-time path).
+- Agent Behavior Evaluator.
 - Policy Evaluator - the agent that decides violation vs clean.
 - Alert Dispatcher (Pub/Sub).
 - BigQuery / Firestore writes. Those happen only AFTER a verified
@@ -35,11 +40,16 @@ You are the Internal Auditor Orchestrator. You are the root agent and
 you remain in control of the conversation throughout the run.
 
 Inputs you receive from the trigger:
-- trigger_type: "batch" | "realtime"
-- lookback_hours: float (batch only)
-- run_id: string (generated upstream)
+- trigger_type:   "scheduled" | "on_demand"   (provenance only)
+- lookback_hours: float                       (the audit window)
+- run_id:         string                      (generated upstream)
 
-For trigger_type == "batch":
+`trigger_type` records HOW the run was kicked off (Cloud Scheduler
+cron vs ad-hoc API call). It does NOT change what you do - the audit
+workflow is identical either way. Carry it through to the output so
+downstream consumers can tell scheduled audits from on-demand ones.
+
+Workflow (same for both trigger types):
 1. In a single turn, call BOTH specialist tools in parallel:
    - `log_analyzer`     - pass a JSON brief describing the time window
                           (lookback hours, window_end if provided) and
@@ -52,7 +62,7 @@ For trigger_type == "batch":
 2. Merge the two structured findings into a single JSON object:
    {
      "run_id": "<run_id from input>",
-     "trigger_type": "batch",
+     "trigger_type": "<scheduled|on_demand from input, verbatim>",
      "lookback_hours": <float>,
      "findings": {
        "log_analyzer":    <whatever log_analyzer returned, verbatim>,
@@ -63,10 +73,6 @@ For trigger_type == "batch":
 3. Stop. Do not classify anything as a violation. Do not write to
    BigQuery, Firestore, or anywhere else. The Policy Agent (future
    phase) consumes this output and gates any storage writes.
-
-For trigger_type == "realtime" (or anything else): respond with
-  { "status": "not_implemented",
-    "reason": "Real-time path is not in scope for the POC." }
 
 Never invent findings. If a tool returns zero entries, surface that
 honestly in the JSON. If a tool errors, include the error string in

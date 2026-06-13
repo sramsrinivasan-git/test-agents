@@ -1,7 +1,7 @@
 [
   {"name": "run_id",           "type": "STRING",    "mode": "REQUIRED", "description": "Unique ID for this audit run (e.g. audit-2026-04-14T10:00:00Z)"},
-  {"name": "trigger_type",     "type": "STRING",    "mode": "REQUIRED", "description": "batch | realtime"},
-  {"name": "trigger_source",   "type": "STRING",    "mode": "NULLABLE", "description": "For batch: scheduler job name. For realtime: source agent ID"},
+  {"name": "trigger_type",     "type": "STRING",    "mode": "REQUIRED", "description": "scheduled | on_demand (provenance: how the run was kicked off)"},
+  {"name": "trigger_source",   "type": "STRING",    "mode": "NULLABLE", "description": "For scheduled: scheduler job name. For on_demand: caller identifier"},
   {"name": "started_at",       "type": "TIMESTAMP", "mode": "REQUIRED", "description": "When the orchestrator began this run"},
   {"name": "completed_at",     "type": "TIMESTAMP", "mode": "NULLABLE", "description": "When the orchestrator finished this run"},
   {"name": "duration_ms",      "type": "INTEGER",   "mode": "NULLABLE", "description": "Total run duration in milliseconds"},

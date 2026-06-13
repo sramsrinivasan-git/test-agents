@@ -61,9 +61,11 @@ curl -s -X POST localhost:8080/audit \
 
 In the ADK web UI, select `internal_auditor` from the agent picker and
 send a message like:
-> `trigger_type=batch lookback_hours=1 run_id=audit-local-1`
+> `trigger_type=on_demand lookback_hours=1 run_id=audit-local-1`
 You'll see the orchestrator fan out to `log_analyzer` + `asset_inspector`
-in parallel and return the merged JSON.
+in parallel and return the merged JSON. (`trigger_type` is `scheduled`
+when a Cloud Scheduler cron fires the run, `on_demand` for everything
+else — the workflow is the same either way.)
 
 ## Deploy to GKE
 

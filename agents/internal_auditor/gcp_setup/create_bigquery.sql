@@ -21,8 +21,8 @@
 -- ─────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `internal_auditor.audit_runs` (
   run_id            STRING    NOT NULL  OPTIONS(description = "Unique ID for this audit run (e.g. audit-2026-04-14T10:00:00Z)"),
-  trigger_type      STRING    NOT NULL  OPTIONS(description = "batch | realtime"),
-  trigger_source    STRING              OPTIONS(description = "For batch: scheduler job name. For realtime: source agent ID"),
+  trigger_type      STRING    NOT NULL  OPTIONS(description = "scheduled | on_demand (provenance: how the run was kicked off)"),
+  trigger_source    STRING              OPTIONS(description = "For scheduled: scheduler job name. For on_demand: caller identifier"),
   started_at        TIMESTAMP NOT NULL  OPTIONS(description = "When the orchestrator began this run"),
   completed_at      TIMESTAMP           OPTIONS(description = "When the orchestrator finished this run"),
   duration_ms       INT64               OPTIONS(description = "Total run duration in milliseconds"),
@@ -51,7 +51,7 @@ OPTIONS(description = "One row per Internal Auditor orchestrator execution.");
 CREATE TABLE IF NOT EXISTS `internal_auditor.audit_findings` (
   finding_id          STRING    NOT NULL  OPTIONS(description = "Unique finding ID"),
   run_id              STRING    NOT NULL  OPTIONS(description = "FK to audit_runs.run_id"),
-  trigger_type        STRING    NOT NULL  OPTIONS(description = "batch | realtime"),
+  trigger_type        STRING    NOT NULL  OPTIONS(description = "scheduled | on_demand (provenance: how the run was kicked off)"),
   found_at            TIMESTAMP NOT NULL  OPTIONS(description = "When this finding was detected"),
 
   detected_by         STRING    NOT NULL  OPTIONS(description = "log_analyzer | asset_inspector | agent_behavior_evaluator"),
