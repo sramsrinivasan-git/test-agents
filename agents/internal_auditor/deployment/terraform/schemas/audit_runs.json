@@ -1,0 +1,18 @@
+[
+  {"name": "run_id",           "type": "STRING",    "mode": "REQUIRED", "description": "Unique ID for this audit run (e.g. audit-2026-04-14T10:00:00Z)"},
+  {"name": "trigger_type",     "type": "STRING",    "mode": "REQUIRED", "description": "batch | realtime"},
+  {"name": "trigger_source",   "type": "STRING",    "mode": "NULLABLE", "description": "For batch: scheduler job name. For realtime: source agent ID"},
+  {"name": "started_at",       "type": "TIMESTAMP", "mode": "REQUIRED", "description": "When the orchestrator began this run"},
+  {"name": "completed_at",     "type": "TIMESTAMP", "mode": "NULLABLE", "description": "When the orchestrator finished this run"},
+  {"name": "duration_ms",      "type": "INTEGER",   "mode": "NULLABLE", "description": "Total run duration in milliseconds"},
+  {"name": "window_start",     "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Lookback window start (batch only)"},
+  {"name": "window_end",       "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Lookback window end (batch only)"},
+  {"name": "lookback_hours",   "type": "FLOAT",     "mode": "NULLABLE", "description": "Configured lookback interval in hours"},
+  {"name": "verdict",          "type": "STRING",    "mode": "REQUIRED", "description": "clean | violation | inconclusive"},
+  {"name": "verdict_source",   "type": "STRING",    "mode": "REQUIRED", "description": "policy_evaluator | ground_truth | human_escalation"},
+  {"name": "total_findings",   "type": "INTEGER",   "mode": "REQUIRED", "description": "Number of findings in this run"},
+  {"name": "total_violations", "type": "INTEGER",   "mode": "REQUIRED", "description": "Number of confirmed violations"},
+  {"name": "replan_count",     "type": "INTEGER",   "mode": "REQUIRED", "description": "Number of replan loops executed (0-3)"},
+  {"name": "alert_dispatched", "type": "BOOLEAN",   "mode": "REQUIRED", "description": "Whether an alert was sent to Pub/Sub"},
+  {"name": "scratchpad_json",  "type": "JSON",      "mode": "NULLABLE", "description": "Full ReAct scratchpad at end of run"}
+]

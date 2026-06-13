@@ -1,0 +1,27 @@
+[project]
+name = "aaas-agent-internal-auditor"
+version = "0.1.0"
+description = "Internal Auditor: orchestrator + log analyzer agents (POC, Google ADK + Gemini)."
+requires-python = ">=3.10"
+dependencies = [
+    "google-adk>=0.5",
+    "google-genai>=0.7",
+    "mcp>=1.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+]
+
+[project.scripts]
+internal-auditor = "internal_auditor.main:main"
+internal-auditor-server = "internal_auditor.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# `src/` IS the `internal_auditor` package. Matches the layout used by
+# mcp_servers/*.
+[tool.setuptools]
+package-dir = { "internal_auditor" = "src" }
+packages = ["internal_auditor"]

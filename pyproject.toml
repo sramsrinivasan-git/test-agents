@@ -7,5 +7,5 @@ requires-python = ">=3.10"
 [tool.uv.workspace]
 members = [
     "mcp_servers/*",
-    # "agents/*",   # uncomment once agents/<name>/pyproject.toml exist
+    "agents/*",
 ]

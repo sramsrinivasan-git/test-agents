@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: internal-auditor
+  namespace: agents
+  labels:
+    app: internal-auditor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: internal-auditor
+  template:
+    metadata:
+      labels:
+        app: internal-auditor
+    spec:
+      serviceAccountName: internal-auditor
+      containers:
+        - name: internal-auditor
+          # Replace with the image you pushed to Artifact Registry, e.g.
+          # us-central1-docker.pkg.dev/PROJECT_ID/agents/internal-auditor:0.1.0
+          image: REPLACE_WITH_ARTIFACT_REGISTRY_IMAGE
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: GEMINI_MODEL
+              value: "gemini-3-flash"
+            # In-cluster MCP server URL. Adjust namespace/service-name if
+            # the gcp-log-analyzer MCP server lives elsewhere.
+            - name: GCP_LOG_ANALYZER_MCP_URL
+              value: "http://gcp-log-analyzer-mcp.mcp-servers.svc.cluster.local:8080/mcp"
+            - name: GCP_CLOUD_ASSET_MCP_URL
+              value: "http://gcp-cloud-asset-mcp.mcp-servers.svc.cluster.local:8080/mcp"
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: gcp-config
+                  key: project_id
+            # Vertex AI region used by ADK's Gemini client.
+            - name: GOOGLE_CLOUD_LOCATION
+              value: "us-central1"
+            - name: GOOGLE_GENAI_USE_VERTEXAI
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
