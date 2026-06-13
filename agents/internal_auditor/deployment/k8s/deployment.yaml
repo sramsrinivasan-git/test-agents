@@ -28,12 +28,20 @@ spec:
           env:
             - name: GEMINI_MODEL
               value: "gemini-3-flash"
-            # In-cluster MCP server URL. Adjust namespace/service-name if
-            # the gcp-log-analyzer MCP server lives elsewhere.
-            - name: GCP_LOG_ANALYZER_MCP_URL
-              value: "http://gcp-log-analyzer-mcp.mcp-servers.svc.cluster.local:8080/mcp"
-            - name: GCP_CLOUD_ASSET_MCP_URL
-              value: "http://gcp-cloud-asset-mcp.mcp-servers.svc.cluster.local:8080/mcp"
+            # Sandbox / MCP wiring. "cluster" mode means each specialist
+            # tool call claims a fresh sandboxed MCP server pod from
+            # the named warm pool, uses it, and releases it. See
+            # rbac.yaml for the SandboxClaim permissions this needs.
+            - name: SANDBOX_MODE
+              value: "cluster"
+            - name: SANDBOX_NAMESPACE
+              value: "default"
+            - name: GCP_LOG_ANALYZER_WARMPOOL
+              value: "gcp-log-analyzer-warmpool"
+            - name: GCP_CLOUD_ASSET_WARMPOOL
+              value: "gcp-cloud-asset-warmpool"
+            - name: MCP_SERVER_PORT
+              value: "8080"
             - name: GOOGLE_CLOUD_PROJECT
               valueFrom:
                 configMapKeyRef:

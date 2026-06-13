@@ -1,0 +1,52 @@
+# Sandbox template + warm pool for the gcp-cloud-asset MCP server.
+# Same shape as sandbox-log-analyzer.yaml; see that file for notes on
+# the API version (extensions.agents.x-k8s.io/v1beta1).
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: gcp-cloud-asset-template
+  namespace: default
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        sandbox-type: mcp-server
+        mcp-server: gcp-cloud-asset
+    spec:
+      runtimeClassName: gvisor
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: mcp-server
+          image: REPLACE_WITH_AR/mcp_servers/gcp-cloud-asset:0.1.0
+          ports:
+            - name: mcp
+              containerPort: 8080
+          env:
+            - name: MCP_TRANSPORT
+              value: "streamable-http"
+            - name: PORT
+              value: "8080"
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: gcp-config
+                  key: project_id
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: gcp-cloud-asset-warmpool
+  namespace: default
+spec:
+  replicas: 2
+  sandboxTemplateRef:
+    name: gcp-cloud-asset-template

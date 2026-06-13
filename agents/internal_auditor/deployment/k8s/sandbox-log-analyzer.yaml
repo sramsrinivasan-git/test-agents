@@ -1,0 +1,60 @@
+# Sandbox template + warm pool for the gcp-log-analyzer MCP server.
+#
+# The orchestrator's specialist tool claims one pod from this pool per
+# call, talks to it over streamable-http, and deletes the SandboxClaim
+# on completion (recycling the pod via the lifecycle.shutdownPolicy on
+# the claim).
+#
+# API version note: the upstream kubernetes-sigs/agent-sandbox project
+# uses extensions.agents.x-k8s.io/v1beta1. If your cluster's installed
+# Agent Sandbox controller still serves v1alpha1, replace below.
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxTemplate
+metadata:
+  name: gcp-log-analyzer-template
+  namespace: default
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        sandbox-type: mcp-server
+        mcp-server: gcp-log-analyzer
+    spec:
+      runtimeClassName: gvisor
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: mcp-server
+          # Replace with the gcp-log-analyzer image you pushed to AR.
+          image: REPLACE_WITH_AR/mcp_servers/gcp-log-analyzer:0.1.0
+          ports:
+            - name: mcp
+              containerPort: 8080
+          env:
+            - name: MCP_TRANSPORT
+              value: "streamable-http"
+            - name: PORT
+              value: "8080"
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: gcp-config
+                  key: project_id
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxWarmPool
+metadata:
+  name: gcp-log-analyzer-warmpool
+  namespace: default
+spec:
+  replicas: 2
+  sandboxTemplateRef:
+    name: gcp-log-analyzer-template

@@ -17,23 +17,23 @@ Out of scope on purpose (deferred to later phases per plan.md):
   violation; with no Policy Agent yet, there is nothing to write.
 - ReAct scratchpad / replan loop. Will land with the Policy Agent.
 
-Why AgentTool, not sub_agents:
+Why FunctionTool, not AgentTool / sub_agents:
 The orchestrator is a coordinator, not a router. It needs to call
 specialists in parallel, get structured returns, merge them, and
-potentially re-invoke during a replan. `AgentTool` keeps the
-orchestrator in control of the conversation and lets its LLM fan out
-to log_analyzer + asset_inspector in a single turn. `sub_agents` would
-transfer control away and serialize the calls.
+potentially re-invoke during a replan. Each specialist tool also
+claims a fresh sandboxed MCP server pod for its single call and
+releases it on completion - that lifecycle lives inside a plain async
+function exposed as a `FunctionTool`, with the inner specialist LLM
+constructed against the per-call MCP endpoint.
 """
 
 from __future__ import annotations
 
 from google.adk.agents import LlmAgent
-from google.adk.tools.agent_tool import AgentTool
 
-from internal_auditor.asset_inspector import asset_inspector_agent
+from internal_auditor.asset_inspector import asset_inspector_tool
 from internal_auditor.config import GEMINI_MODEL
-from internal_auditor.log_analyzer import log_analyzer_agent
+from internal_auditor.log_analyzer import log_analyzer_tool
 
 ORCHESTRATOR_INSTRUCTION = """\
 You are the Internal Auditor Orchestrator. You are the root agent and
@@ -90,8 +90,5 @@ root_agent = LlmAgent(
         "parallel."
     ),
     instruction=ORCHESTRATOR_INSTRUCTION,
-    tools=[
-        AgentTool(agent=log_analyzer_agent),
-        AgentTool(agent=asset_inspector_agent),
-    ],
+    tools=[log_analyzer_tool, asset_inspector_tool],
 )

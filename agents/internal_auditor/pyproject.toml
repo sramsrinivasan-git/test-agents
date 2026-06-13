@@ -7,6 +7,7 @@ dependencies = [
     "google-adk>=0.5",
     "google-genai>=0.7",
     "mcp>=1.0",
+    "k8s-agent-sandbox>=0.1",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",

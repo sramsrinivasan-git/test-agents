@@ -1,28 +1,29 @@
-"""Asset Inspector sub-agent.
+"""Asset Inspector specialist.
 
-Snapshots GCP resource state and IAM bindings for a given time window
-via the gcp-cloud-asset MCP server. Returns structured findings to the
-orchestrator. Like the Log Analyzer, it does NOT classify anything as a
-violation - that's the future Policy Agent's job per plan.md.
+Each invocation claims a fresh sandboxed gcp-cloud-asset MCP server
+pod, runs a one-shot inner LlmAgent against that pod's MCP endpoint,
+returns structured findings, and releases the sandbox.
+
+Like the Log Analyzer, it does NOT classify anything as a violation -
+that's the future Policy Agent's job per plan.md.
 """
 
 from __future__ import annotations
 
 from google.adk.agents import LlmAgent
+from google.adk.tools import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import (
     MCPToolset,
     StreamableHTTPServerParams,
 )
 
-from internal_auditor.config import GCP_CLOUD_ASSET_MCP_URL, GEMINI_MODEL
-
-asset_inspector_mcp = MCPToolset(
-    connection_params=StreamableHTTPServerParams(url=GCP_CLOUD_ASSET_MCP_URL),
-)
+from internal_auditor import config
+from internal_auditor._inner_run import run_inner_agent
+from internal_auditor.sandbox import claim_mcp_endpoint
 
 
 ASSET_INSPECTOR_INSTRUCTION = """\
-You are the Asset Inspector agent inside the Internal Auditor.
+You are the Asset Inspector specialist inside the Internal Auditor.
 
 Goal: given a time window and optional filters (resource type, project,
 IAM role, member), call the gcp-cloud-asset MCP tools to snapshot the
@@ -65,14 +66,37 @@ CRITICAL constraints:
 """
 
 
-asset_inspector_agent = LlmAgent(
-    name="asset_inspector",
-    model=GEMINI_MODEL,
-    description=(
-        "Snapshots GCP resource state and IAM bindings via the "
-        "gcp-cloud-asset MCP server. Returns structured findings; does "
-        "not make violation judgements."
-    ),
-    instruction=ASSET_INSPECTOR_INSTRUCTION,
-    tools=[asset_inspector_mcp],
-)
+async def asset_inspector(request: str) -> str:
+    """Snapshot GCP resource state + IAM bindings for a time window.
+
+    Each call claims a fresh sandboxed gcp-cloud-asset MCP server pod
+    from the warm pool, runs the specialist LLM against it, then
+    releases the pod.
+
+    Args:
+        request: Free-form brief from the orchestrator describing the
+            snapshot anchor (window_end) and any filters
+            (resource_type, project, IAM role, member). The specialist
+            LLM will translate this into the appropriate MCP tool call.
+
+    Returns:
+        JSON string with the specialist's findings.
+    """
+    async with claim_mcp_endpoint(
+        config.GCP_CLOUD_ASSET_WARMPOOL,
+        local_fallback_url=config.GCP_CLOUD_ASSET_MCP_URL,
+    ) as endpoint:
+        toolset = MCPToolset(
+            connection_params=StreamableHTTPServerParams(url=endpoint),
+        )
+        inner_agent = LlmAgent(
+            name="asset_inspector",
+            model=config.GEMINI_MODEL,
+            description="GCP resource + IAM snapshot specialist.",
+            instruction=ASSET_INSPECTOR_INSTRUCTION,
+            tools=[toolset],
+        )
+        return await run_inner_agent(inner_agent, request, user_id="asset_inspector")
+
+
+asset_inspector_tool = FunctionTool(func=asset_inspector)

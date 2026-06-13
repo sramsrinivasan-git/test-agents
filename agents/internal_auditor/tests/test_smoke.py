@@ -1,13 +1,16 @@
-"""Smoke tests: confirm the agents build without raising.
+"""Smoke tests: confirm the agents and tools build without raising.
 
-Doesn't hit the MCP servers or the Gemini API - just verifies that
-imports and agent construction work.
+Doesn't hit the MCP servers, the Gemini API, or the Kubernetes API.
+The per-call sandbox claim only fires when a specialist function is
+awaited, so importing alone is safe.
 """
 
 from __future__ import annotations
 
+import inspect
 
-def test_root_agent_imports_and_exposes_both_specialists_as_tools() -> None:
+
+def test_root_agent_exposes_both_specialist_function_tools() -> None:
     from internal_auditor import root_agent
 
     assert root_agent.name == "orchestrator"
@@ -16,15 +19,22 @@ def test_root_agent_imports_and_exposes_both_specialists_as_tools() -> None:
     assert "asset_inspector" in tool_names
 
 
-def test_log_analyzer_has_mcp_toolset() -> None:
-    from internal_auditor.log_analyzer import log_analyzer_agent
+def test_log_analyzer_specialist_function_is_async() -> None:
+    from internal_auditor.log_analyzer import log_analyzer
 
-    assert log_analyzer_agent.name == "log_analyzer"
-    assert len(log_analyzer_agent.tools) >= 1
+    assert inspect.iscoroutinefunction(log_analyzer)
 
 
-def test_asset_inspector_has_mcp_toolset() -> None:
-    from internal_auditor.asset_inspector import asset_inspector_agent
+def test_asset_inspector_specialist_function_is_async() -> None:
+    from internal_auditor.asset_inspector import asset_inspector
 
-    assert asset_inspector_agent.name == "asset_inspector"
-    assert len(asset_inspector_agent.tools) >= 1
+    assert inspect.iscoroutinefunction(asset_inspector)
+
+
+def test_sandbox_helper_is_async_context_manager_factory() -> None:
+    from internal_auditor.sandbox import claim_mcp_endpoint
+
+    # Calling it returns an async context manager (no actual claim
+    # happens until __aenter__ runs).
+    cm = claim_mcp_endpoint("fake-pool", local_fallback_url="http://x/mcp")
+    assert hasattr(cm, "__aenter__") and hasattr(cm, "__aexit__")
