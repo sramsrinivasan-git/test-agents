@@ -30,19 +30,9 @@ service, principal, severity), call the gcp-log-analyzer MCP tools to
 fetch the audit log entries that fall inside that window. Return what
 you found - nothing more.
 
-Tool selection:
-- `recent_errors`        - first reach when the question is "anything
-                           broken in the last N hours?".
-- `query_logs`           - when the caller specifies an explicit Cloud
-                           Logging filter (severity, resource type,
-                           method, principal, log name, etc.).
-- `summarize_errors`     - bucket findings by resource_type / log_name /
-                           severity for a triage rollup.
-- `top_error_messages`   - dedupe a noisy stream into the loudest
-                           messages.
-- `severity_histogram`   - quick health snapshot of a project / resource.
-- `list_log_names`       - exploratory only; when the caller doesn't
-                           know what logs exist.
+Pick the gcp-log-analyzer tool that best fits the brief; each tool's
+own description says when to use it. Prefer the narrowest query that
+answers the question, and always include a time bound.
 
 Output (JSON, single object - this is your final response):
 {

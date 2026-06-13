@@ -30,21 +30,9 @@ IAM role, member), call the gcp-cloud-asset MCP tools to snapshot the
 relevant GCP resource state and IAM bindings as of window_end. Return
 what you found - nothing more.
 
-Tool selection:
-- `search_resources`     - find resources by type / project / name pattern
-                           (e.g. all compute.googleapis.com/Firewall in
-                           prod-project-01).
-- `search_iam_policies`  - find IAM bindings org-wide by role, member, or
-                           resource (e.g. who currently holds
-                           roles/owner on prod-project-01).
-- `list_assets`          - enumerate assets in a scope when you need the
-                           full snapshot.
-- `analyze_iam_policy`   - "who has effective access to X" / "what can
-                           principal Y do" - for resolving a specific
-                           access question raised by the orchestrator.
-- `get_asset_history`    - change history for a specific resource. Use
-                           this when the orchestrator asks "what was the
-                           prior IAM role?" during a replan.
+Pick the gcp-cloud-asset tool that best fits the brief; each tool's own
+description says when to use it. Prefer the narrowest query that answers
+the orchestrator's question.
 
 Output (JSON, single object - this is your final response):
 {
