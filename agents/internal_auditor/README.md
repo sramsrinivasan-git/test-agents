@@ -1,16 +1,16 @@
-# Internal Auditor — agent (POC)
+# Internal Auditor — agent
 
-POC build of three of the agents from [`plan.md`](../../plan.md):
+Implements three of the agents from [`plan.md`](../../plan.md):
 
-- **Orchestrator** — root agent; receives batch triggers and calls the
+- **Orchestrator** — root agent; receives audit triggers and calls the
   specialists below in parallel as `AgentTool`s.
 - **Log Analyzer** — fetches Cloud Logging audit events via the
   `gcp-log-analyzer` MCP server.
 - **Asset Inspector** — snapshots GCP resource state + IAM bindings via
   the `gcp-cloud-asset` MCP server.
 
-Out of scope here (per the POC carve-out — see `src/agent.py` header for
-the list): Agent Behavior Evaluator, Policy Evaluator, Alert Dispatcher,
+Not yet implemented (see `src/agent.py` header for the list):
+Agent Behavior Evaluator, Policy Evaluator, Alert Dispatcher,
 BigQuery/Firestore writes, ReAct scratchpad/replan.
 
 Built on **Google ADK** with **Gemini 3 Flash**. Designed to run as a
@@ -56,7 +56,7 @@ adk web                          # opens http://localhost:8000
 internal-auditor-server
 curl -s -X POST localhost:8080/audit \
   -H 'Content-Type: application/json' \
-  -d '{"trigger_type":"batch","lookback_hours":1.0}'
+  -d '{"trigger_type":"on_demand","lookback_hours":1.0}'
 ```
 
 In the ADK web UI, select `internal_auditor` from the agent picker and

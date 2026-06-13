@@ -1,7 +1,7 @@
 [project]
 name = "aaas-agent-internal-auditor"
 version = "0.1.0"
-description = "Internal Auditor: orchestrator + log analyzer agents (POC, Google ADK + Gemini)."
+description = "Internal Auditor: orchestrator + specialist agents on Google ADK + Gemini."
 requires-python = ">=3.10"
 dependencies = [
     "google-adk>=0.5",

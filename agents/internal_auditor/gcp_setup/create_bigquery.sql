@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS `internal_auditor.audit_runs` (
   completed_at      TIMESTAMP           OPTIONS(description = "When the orchestrator finished this run"),
   duration_ms       INT64               OPTIONS(description = "Total run duration in milliseconds"),
 
-  window_start      TIMESTAMP           OPTIONS(description = "Lookback window start (batch only)"),
-  window_end        TIMESTAMP           OPTIONS(description = "Lookback window end (batch only)"),
+  window_start      TIMESTAMP           OPTIONS(description = "Lookback window start"),
+  window_end        TIMESTAMP           OPTIONS(description = "Lookback window end"),
   lookback_hours    FLOAT64             OPTIONS(description = "Configured lookback interval in hours"),
 
   verdict           STRING    NOT NULL  OPTIONS(description = "clean | violation | inconclusive"),
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS `internal_auditor.audit_findings` (
 
   detected_by         STRING    NOT NULL  OPTIONS(description = "log_analyzer | asset_inspector | agent_behavior_evaluator"),
 
-  -- Cloud Logging fields (batch path - log_analyzer)
+  -- Cloud Logging fields (populated by log_analyzer)
   log_severity        STRING              OPTIONS(description = "Cloud Logging severity: INFO | WARNING | ERROR | CRITICAL"),
   log_method          STRING              OPTIONS(description = "API method (e.g. google.iam.admin.v1.SetIAMPolicy)"),
   log_service         STRING              OPTIONS(description = "GCP service (e.g. iam.googleapis.com)"),
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS `internal_auditor.audit_findings` (
   log_timestamp       TIMESTAMP           OPTIONS(description = "Original event timestamp from Cloud Logging"),
   log_raw_json        JSON                OPTIONS(description = "Raw Cloud Logging JSON event"),
 
-  -- Cloud Asset fields (batch path - asset_inspector)
+  -- Cloud Asset fields (populated by asset_inspector)
   asset_type          STRING              OPTIONS(description = "Cloud Asset type (e.g. compute.googleapis.com/Firewall)"),
   asset_name          STRING              OPTIONS(description = "Full asset resource name"),
   asset_project       STRING              OPTIONS(description = "GCP project ID the asset belongs to"),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS `internal_auditor.audit_findings` (
   asset_snapshot_ts   TIMESTAMP           OPTIONS(description = "Timestamp of the Cloud Asset snapshot"),
   asset_raw_json      JSON                OPTIONS(description = "Raw Cloud Asset export JSON"),
 
-  -- Agent behavior fields (realtime path - agent_behavior_evaluator)
+  -- Agent behavior fields (populated by agent_behavior_evaluator)
   agent_id            STRING              OPTIONS(description = "ID of the user-facing agent being monitored"),
   conversation_id     STRING              OPTIONS(description = "Conversation/session ID"),
   agent_user_input    STRING              OPTIONS(description = "What the user asked the agent"),

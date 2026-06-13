@@ -96,7 +96,7 @@ curl -sS http://localhost:8080/healthz
 
 curl -sS -X POST http://localhost:8080/audit \
   -H 'Content-Type: application/json' \
-  -d '{"trigger_type":"batch","lookback_hours":1.0}'
+  -d '{"trigger_type":"on_demand","lookback_hours":1.0}'
 # -> {"run_id":"audit-...", "response":"{ ...orchestrator JSON... }"}
 ```
 
@@ -120,6 +120,6 @@ kubectl -n agents rollout status deployment/internal-auditor
   gVisor-isolated runtime. The Service DNS name stays the same, so the
   MCP server URL keeps working.
 - **MCP auth** — the connection to the in-cluster MCP server is
-  unauthenticated today. When you move past POC, run both services
-  inside a service mesh (Istio / Anthos Service Mesh) or wrap the MCP
-  server with mTLS via the GKE Gateway API.
+  unauthenticated today. Before production, run both services inside a
+  service mesh (Istio / Anthos Service Mesh) or wrap the MCP server with
+  mTLS via the GKE Gateway API.

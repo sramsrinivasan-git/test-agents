@@ -1,8 +1,8 @@
-"""Orchestrator agent (root) for the Internal Auditor POC.
+"""Orchestrator agent (root) for the Internal Auditor.
 
 Receives audit triggers, calls specialist agents as tools, returns
-merged findings. In this POC the available specialists are
-`log_analyzer` and `asset_inspector`.
+merged findings. The available specialists today are `log_analyzer`
+and `asset_inspector`.
 
 trigger_type is provenance only ("scheduled" = Cloud Scheduler cron,
 "on_demand" = ad-hoc API call). Both run the same workflow; the field
