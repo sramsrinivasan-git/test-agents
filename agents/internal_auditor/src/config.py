@@ -21,6 +21,12 @@ GCP_LOG_ANALYZER_MCP_URL: str = os.environ.get(
     "http://gcp-log-analyzer-mcp.mcp-servers.svc.cluster.local:8080/mcp",
 )
 
+# Same convention for the gcp-cloud-asset MCP server.
+GCP_CLOUD_ASSET_MCP_URL: str = os.environ.get(
+    "GCP_CLOUD_ASSET_MCP_URL",
+    "http://gcp-cloud-asset-mcp.mcp-servers.svc.cluster.local:8080/mcp",
+)
+
 # Default GCP project the MCP tools fall through to when the orchestrator
 # doesn't override `project_id` per-call.
 GOOGLE_CLOUD_PROJECT: str | None = os.environ.get("GOOGLE_CLOUD_PROJECT")
