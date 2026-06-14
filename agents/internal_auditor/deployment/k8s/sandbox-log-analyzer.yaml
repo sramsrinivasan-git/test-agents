@@ -1,5 +1,8 @@
 # Sandbox template + warm pool for the gcp-log-analyzer MCP server.
 #
+# Build + GSA setup for THIS server lives in
+# mcp_servers/gcp_log_analyzer/DEPLOY.md.
+#
 # The orchestrator's specialist tool claims one pod from this pool per
 # call, talks to it over streamable-http, and deletes the SandboxClaim
 # on completion (recycling the pod via the lifecycle.shutdownPolicy on
@@ -8,6 +11,9 @@
 # API version note: the upstream kubernetes-sigs/agent-sandbox project
 # uses extensions.agents.x-k8s.io/v1beta1. If your cluster's installed
 # Agent Sandbox controller still serves v1alpha1, replace below.
+#
+# KSA: the matching ServiceAccount (annotated for Workload Identity) is
+# created by step 5 of mcp_servers/gcp_log_analyzer/DEPLOY.md.
 apiVersion: extensions.agents.x-k8s.io/v1beta1
 kind: SandboxTemplate
 metadata:
@@ -21,7 +27,10 @@ spec:
         mcp-server: gcp-log-analyzer
     spec:
       runtimeClassName: gvisor
-      automountServiceAccountToken: false
+      serviceAccountName: gcp-log-analyzer-mcp
+      # automountServiceAccountToken left at the k8s default (true) so
+      # Workload Identity can project the SA token the GCP SDK needs to
+      # impersonate the bound GSA.
       securityContext:
         runAsNonRoot: true
       containers:

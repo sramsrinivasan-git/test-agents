@@ -1,76 +1,122 @@
-# Deploying gcp-cloud-asset to Cloud Run
+# Deploying gcp-cloud-asset to GKE (as a sandboxed warm-pool MCP server)
 
-This deploys the MCP server as a **single** Cloud Run service, reachable over
-HTTPS, running as a dedicated service account. The service is deployed once —
-you grant `roles/cloudasset.viewer` separately for each project (or folder/org)
-you want it to be able to analyze.
+This server runs as **pre-warmed gVisor-sandboxed pods inside a GKE
+cluster**, managed by the GKE Agent Sandbox controller's
+`SandboxWarmPool`. The Internal Auditor orchestrator claims one idle
+pod per specialist tool call, talks to it over MCP, and releases it.
 
-At runtime the MCP client (e.g. Claude) passes `project_id` or `scope` on each
-tool call to target any project the service account has access to. The
-`GOOGLE_CLOUD_PROJECT` env var set at deploy time is only the **default** used
-when no `project_id` is supplied.
+The deployment artifact is therefore an **Artifact Registry image**,
+not a Cloud Run service. The actual `SandboxTemplate` + `SandboxWarmPool`
+manifests live alongside the orchestrator in
+[`agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml`](../../agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml).
+This doc covers what's specific to **this MCP server**: building the
+image, the GSA + Workload Identity binding, and the (possibly
+multi-project / folder / org) IAM grants the sandboxed pods need to
+read Cloud Asset Inventory.
+
+At runtime the orchestrator passes `project_id` or `scope` on each tool
+call, so a single deployment can target any project/folder/org the GSA
+has access to. The `GOOGLE_CLOUD_PROJECT` env var set on the
+`SandboxTemplate` is only the **default** when no `project_id` is
+supplied.
 
 ## Pick your variables
 
 ```bash
-# Project that HOSTS the Cloud Run service (you pay for compute here).
+# GCP project hosting the GKE cluster + Artifact Registry.
 export HOST_PROJECT=my-host-project
 
-# Default project whose assets the server will analyze when no project_id is
-# passed by the caller. Can be the same as HOST_PROJECT or different.
+# Default project whose assets the server analyzes when no project_id
+# is supplied by the caller. Often the same as HOST_PROJECT.
 export ASSET_PROJECT=my-asset-project
 
-# Cloud Run region.
+# AR repo + region.
 export REGION=us-central1
+export AR_REPO=agents
+export IMAGE_TAG=0.1.0
+export IMAGE="${REGION}-docker.pkg.dev/${HOST_PROJECT}/${AR_REPO}/gcp-cloud-asset:${IMAGE_TAG}"
 
-# Dedicated service account for the Cloud Run service.
-export SA_NAME=gcp-cloud-asset-mcp
-export SA_EMAIL="${SA_NAME}@${HOST_PROJECT}.iam.gserviceaccount.com"
-
-# Service name (also becomes part of the URL).
-export SERVICE=gcp-cloud-asset-mcp
+# Identities. The GSA holds GCP IAM; the KSA is mounted into the
+# sandbox pods and is bound to the GSA via Workload Identity.
+export GSA_NAME=gcp-cloud-asset-mcp
+export GSA_EMAIL="${GSA_NAME}@${HOST_PROJECT}.iam.gserviceaccount.com"
+export KSA_NAME=gcp-cloud-asset-mcp
+export NAMESPACE=default              # where the warm pool lives
 ```
 
 ## 1. Enable required APIs (one-time, in HOST_PROJECT)
 
 ```bash
 gcloud services enable \
-  run.googleapis.com \
+  container.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
+  iamcredentials.googleapis.com \
   cloudasset.googleapis.com \
+  logging.googleapis.com \
   --project="$HOST_PROJECT"
 ```
 
-## 2. Create the service account
+Cloud Asset API also needs to be enabled in every **target** project,
+folder, or org you want to read from — not just `HOST_PROJECT`.
+
+## 2. Create the Artifact Registry repo (one-time)
 
 ```bash
-gcloud iam service-accounts create "$SA_NAME" \
+gcloud artifacts repositories create "$AR_REPO" \
   --project="$HOST_PROJECT" \
-  --display-name="GCP Cloud Asset MCP Server"
+  --repository-format=docker \
+  --location="$REGION" \
+  --description="Container images for the internal-auditor agent stack"
 ```
 
-## 3. Grant the service account read access to assets and logs
+## 3. Build + push the image
 
-The Cloud Run service is deployed **once**. You repeat this step for every
-project you want the server to be able to analyze — no redeployment needed.
+```bash
+gcloud builds submit mcp_servers/gcp_cloud_asset \
+  --project="$HOST_PROJECT" \
+  --tag "$IMAGE"
+```
 
-Two roles are required per project:
+> **One-time Cloud Build IAM gotcha:** in projects created after
+> mid-2024, Cloud Build runs as the Compute Engine default SA, which
+> needs `roles/cloudbuild.builds.builder`:
+> ```bash
+> PROJECT_NUMBER=$(gcloud projects describe "$HOST_PROJECT" --format='value(projectNumber)')
+> gcloud projects add-iam-policy-binding "$HOST_PROJECT" \
+>   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+>   --role="roles/cloudbuild.builds.builder"
+> ```
+
+## 4. Create the GSA
+
+```bash
+gcloud iam service-accounts create "$GSA_NAME" \
+  --project="$HOST_PROJECT" \
+  --display-name="GCP Cloud Asset MCP Server (sandboxed)"
+```
+
+## 5. Grant read access on every scope you want to analyze
+
+The image is built **once**; you repeat this step for every project /
+folder / org the server should be able to inspect — no redeploy needed.
+
+Two roles per scope:
 
 | Role | Purpose |
 |---|---|
 | `roles/cloudasset.viewer` | Read Cloud Asset Inventory (resources, IAM policies, history) |
-| `roles/logging.viewer` | Read Cloud Logging runtime logs |
+| `roles/logging.viewer` | Read Cloud Logging runtime logs (audit history) |
 
-Use `roles/logging.privateLogViewer` instead of `roles/logging.viewer` if you
-also need data-access audit logs.
+Use `roles/logging.privateLogViewer` if data-access audit logs are
+also needed.
 
 **Single project:**
 
 ```bash
 for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
   gcloud projects add-iam-policy-binding "$ASSET_PROJECT" \
-    --member="serviceAccount:${SA_EMAIL}" \
+    --member="serviceAccount:${GSA_EMAIL}" \
     --role="$ROLE"
 done
 ```
@@ -81,189 +127,135 @@ done
 for PROJECT in project-a project-b project-c; do
   for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
     gcloud projects add-iam-policy-binding "$PROJECT" \
-      --member="serviceAccount:${SA_EMAIL}" \
+      --member="serviceAccount:${GSA_EMAIL}" \
       --role="$ROLE"
   done
 done
 ```
 
-**Entire folder or org** (covers all projects underneath — most convenient for
-large environments):
+**Entire folder or org** (covers all projects underneath — most
+convenient for large environments):
 
 ```bash
 for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
   gcloud resource-manager folders add-iam-policy-binding FOLDER_ID \
-    --member="serviceAccount:${SA_EMAIL}" \
+    --member="serviceAccount:${GSA_EMAIL}" \
     --role="$ROLE"
 done
 
 # or at the org level:
 for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
   gcloud organizations add-iam-policy-binding ORG_ID \
-    --member="serviceAccount:${SA_EMAIL}" \
+    --member="serviceAccount:${GSA_EMAIL}" \
     --role="$ROLE"
 done
 ```
 
-## 3b. Grant Cloud Build IAM (one-time, easy to miss)
+## 6. Workload Identity binding (GSA ↔ KSA)
 
-`gcloud run deploy --source` builds the container with Cloud Build, which
-runs as the project's **Compute Engine default service account** in
-projects created after mid-2024. That SA doesn't have build permissions
-by default — without this grant the first deploy fails with:
-
-> `<num>-compute@developer.gserviceaccount.com does not have storage.objects.get access to the google cloud storage object`
-
-Fix it once:
+Lets the in-cluster KSA impersonate the GSA without a static key.
 
 ```bash
-PROJECT_NUMBER=$(gcloud projects describe "$HOST_PROJECT" --format='value(projectNumber)')
-COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-
-gcloud projects add-iam-policy-binding "$HOST_PROJECT" \
-  --member="serviceAccount:${COMPUTE_SA}" \
-  --role="roles/cloudbuild.builds.builder"
-```
-
-## 4. Deploy to Cloud Run from source
-
-Run this from the repo root (one level above `mcp_servers/`):
-
-```bash
-gcloud run deploy "$SERVICE" \
+gcloud iam service-accounts add-iam-policy-binding "$GSA_EMAIL" \
   --project="$HOST_PROJECT" \
-  --region="$REGION" \
-  --source=mcp_servers/gcp_cloud_asset \
-  --service-account="$SA_EMAIL" \
-  --no-allow-unauthenticated \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=${ASSET_PROJECT},MCP_TRANSPORT=streamable-http" \
-  --cpu=1 --memory=512Mi \
-  --min-instances=0 --max-instances=3
+  --role="roles/iam.workloadIdentityUser" \
+  --member="serviceAccount:${HOST_PROJECT}.svc.id.goog[${NAMESPACE}/${KSA_NAME}]"
 ```
 
-What this does:
-
-- `--source mcp_servers/gcp_cloud_asset` — Cloud Build picks up the
-  `Dockerfile` in that directory, builds an image, pushes to Artifact
-  Registry, and deploys.
-- `--no-allow-unauthenticated` — only callers with `roles/run.invoker`
-  on this service can hit it.
-- `MCP_TRANSPORT=streamable-http` — flips the server out of stdio mode
-  into HTTP mode; it listens on `$PORT` (set by Cloud Run to `8080`).
-- `GOOGLE_CLOUD_PROJECT` — default project scope when callers don't pass
-  `project_id` or `scope`.
-
-Take note of the service URL printed at the end:
-`https://gcp-cloud-asset-mcp-xxxxx-uc.a.run.app`
-
-## 5. Grant invokers
-
-Decide who can call the service. For a single user:
+Create the KSA in the cluster and annotate it with the GSA:
 
 ```bash
-gcloud run services add-iam-policy-binding "$SERVICE" \
+kubectl create serviceaccount "$KSA_NAME" -n "$NAMESPACE"
+kubectl annotate serviceaccount "$KSA_NAME" -n "$NAMESPACE" \
+  "iam.gke.io/gcp-service-account=${GSA_EMAIL}"
+```
+
+The sandbox template's `podTemplate.spec.serviceAccountName` must
+match `$KSA_NAME` so warm-pool pods pick it up.
+
+## 7. Wire the image + KSA into the SandboxTemplate
+
+Edit
+[`agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml`](../../agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml)
+and replace the placeholder image:
+
+```bash
+sed -i.bak "s|REPLACE_WITH_AR/mcp_servers/gcp-cloud-asset:0.1.0|$IMAGE|" \
+  agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml
+```
+
+The template also references `serviceAccountName: gcp-cloud-asset-mcp`
+and expects `automountServiceAccountToken: true` (Workload Identity
+needs the projected token).
+
+## 8. Apply + verify
+
+```bash
+kubectl apply -f agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml
+
+kubectl -n "$NAMESPACE" get sandboxwarmpool gcp-cloud-asset-warmpool
+# READY 2/2 within ~30s.
+
+kubectl -n "$NAMESPACE" get pods -l mcp-server=gcp-cloud-asset
+# 2 idle pods, status Running, ready 1/1.
+```
+
+Smoke-test a single claim from inside the cluster:
+
+```bash
+kubectl -n "$NAMESPACE" apply -f - <<'EOF'
+apiVersion: extensions.agents.x-k8s.io/v1beta1
+kind: SandboxClaim
+metadata: { name: smoke-test, namespace: default }
+spec:
+  warmPoolRef: { name: gcp-cloud-asset-warmpool }
+  lifecycle:  { shutdownPolicy: Delete }
+EOF
+
+POD_IP=$(kubectl -n "$NAMESPACE" get sandboxclaim smoke-test \
+  -o jsonpath='{.status.sandbox.podIPs[0]}')
+
+kubectl -n "$NAMESPACE" run mcp-curl --rm -it --restart=Never --image=curlimages/curl -- \
+  curl -sS -X POST "http://${POD_IP}:8080/mcp" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+
+kubectl -n "$NAMESPACE" delete sandboxclaim smoke-test
+```
+
+## Updating
+
+```bash
+export IMAGE_TAG=0.1.1
+export IMAGE="${REGION}-docker.pkg.dev/${HOST_PROJECT}/${AR_REPO}/gcp-cloud-asset:${IMAGE_TAG}"
+gcloud builds submit mcp_servers/gcp_cloud_asset \
   --project="$HOST_PROJECT" \
-  --region="$REGION" \
-  --member="user:you@example.com" \
-  --role="roles/run.invoker"
+  --tag "$IMAGE"
+
+sed -i.bak "s|gcp-cloud-asset:.*|gcp-cloud-asset:${IMAGE_TAG}|" \
+  agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml
+kubectl apply -f agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml
 ```
 
-For a team via a Google Group:
-
-```bash
-gcloud run services add-iam-policy-binding "$SERVICE" \
-  --project="$HOST_PROJECT" \
-  --region="$REGION" \
-  --member="group:my-team@example.com" \
-  --role="roles/run.invoker"
-```
-
-## 6. Smoke-test the deployed server
-
-```bash
-TOKEN=$(gcloud auth print-identity-token)
-SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-  --project="$HOST_PROJECT" --region="$REGION" \
-  --format='value(status.url)')
-```
-
-Liveness check (server is up + auth works):
-
-```bash
-curl -sS -i \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Accept: application/json, text/event-stream" \
-  "$SERVICE_URL/mcp"
-```
-
-Real protocol handshake (proves MCP is actually working end-to-end):
-
-```bash
-curl -sS -i \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "Content-Type: application/json" \
-  -X POST "$SERVICE_URL/mcp" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-      "protocolVersion": "2024-11-05",
-      "capabilities": {},
-      "clientInfo": {"name": "curl", "version": "0"}
-    }
-  }'
-```
-
-Expect a JSON-RPC response with server info and capabilities. A 401/403
-means the `roles/run.invoker` binding from step 5 didn't take; a 404
-means try `/sse` instead of `/mcp`.
-
-## 7. Connect your MCP client
-
-The connection URL is `${SERVICE_URL}/mcp` (streamable-http) or
-`${SERVICE_URL}/sse` (SSE), depending on what the client supports.
-
-Auth requires a Google identity token in `Authorization: Bearer <id-token>`.
-Two options:
-
-1. **Use `gcloud run services proxy` locally** for clients that only do
-   stdio or untrusted HTTP:
-   ```bash
-   gcloud run services proxy "$SERVICE" \
-     --project="$HOST_PROJECT" --region="$REGION" \
-     --port=8080
-   ```
-   This opens an authenticated tunnel on `http://localhost:8080`. Point
-   your MCP client at `http://localhost:8080/mcp`.
-
-2. **If your client supports custom headers**, set an `Authorization`
-   header with the output of `gcloud auth print-identity-token`. Note
-   that token expires every ~1 hour.
-
-## Updating the deployment
-
-```bash
-gcloud run deploy "$SERVICE" \
-  --project="$HOST_PROJECT" \
-  --region="$REGION" \
-  --source=mcp_servers/gcp_cloud_asset
-```
+The Agent Sandbox controller drains the warm pool and refills with
+pods running the new image.
 
 ## Cost notes
 
-- Cloud Run with `--min-instances=0` scales to zero when idle. You pay
-  only for request time.
-- Cloud Asset API calls are priced per 2,000 operations. Normal MCP usage
-  is well under $1/month.
+- Per-call **claim** has no inherent cost — the cost is the always-on
+  warm pods (`replicas: N` × node CPU/memory share). Two `100m / 256Mi`
+  request pods is a few cents/day on a small node pool.
+- Cloud Asset and Logging API reads are charged separately, trivial
+  for normal query volumes.
+- Unlike the previous Cloud Run model there is no scale-to-zero — warm
+  pods are kept running so that claims complete in sub-second.
 
 ## Tearing down
 
 ```bash
-gcloud run services delete "$SERVICE" \
-  --project="$HOST_PROJECT" --region="$REGION"
-
-gcloud iam service-accounts delete "$SA_EMAIL" \
-  --project="$HOST_PROJECT"
+kubectl -n "$NAMESPACE" delete -f agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml
+kubectl -n "$NAMESPACE" delete serviceaccount "$KSA_NAME"
+gcloud iam service-accounts delete "$GSA_EMAIL" --project="$HOST_PROJECT"
+gcloud artifacts docker images delete "$IMAGE" --project="$HOST_PROJECT" --delete-tags --quiet
 ```

@@ -2,9 +2,8 @@
 
 Transport is selected by the MCP_TRANSPORT env var:
   - 'stdio' (default): for local MCP clients launching this as a subprocess.
-  - 'streamable-http': for remote deployment behind an HTTPS endpoint
-    (e.g. Cloud Run). Listens on $PORT (Cloud Run convention; defaults
-    to 8080).
+  - 'streamable-http': for remote deployment - this is what the GKE
+    SandboxWarmPool pods run. Listens on $PORT (defaults to 8080).
   - 'sse': older HTTP transport, kept for clients that don't yet speak
     streamable-http.
 """

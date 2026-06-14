@@ -10,7 +10,7 @@ policies across projects, folders, and organizations.
 mcp_servers/gcp_cloud_asset/
 ├── pyproject.toml          # this package's deps + console script
 ├── README.md               # you are here
-├── Dockerfile              # production image for Cloud Run
+├── Dockerfile              # production image (GKE Agent Sandbox warm pool; see DEPLOY.md)
 ├── tests/                  # tests for this server
 └── src/                    # the package contents (importable as `gcp_cloud_asset`)
     ├── __init__.py

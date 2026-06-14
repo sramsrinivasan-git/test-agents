@@ -1,6 +1,10 @@
 # Sandbox template + warm pool for the gcp-cloud-asset MCP server.
+#
+# Build + GSA setup for THIS server lives in
+# mcp_servers/gcp_cloud_asset/DEPLOY.md.
+#
 # Same shape as sandbox-log-analyzer.yaml; see that file for notes on
-# the API version (extensions.agents.x-k8s.io/v1beta1).
+# the API version (extensions.agents.x-k8s.io/v1beta1) and the KSA.
 apiVersion: extensions.agents.x-k8s.io/v1beta1
 kind: SandboxTemplate
 metadata:
@@ -14,7 +18,10 @@ spec:
         mcp-server: gcp-cloud-asset
     spec:
       runtimeClassName: gvisor
-      automountServiceAccountToken: false
+      serviceAccountName: gcp-cloud-asset-mcp
+      # automountServiceAccountToken left at the k8s default (true) so
+      # Workload Identity can project the SA token the GCP SDK needs to
+      # impersonate the bound GSA.
       securityContext:
         runAsNonRoot: true
       containers:
