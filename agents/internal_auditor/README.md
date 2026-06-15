@@ -22,15 +22,18 @@ Built on **Google ADK** with **Gemini 3 Flash**. Designed to run on
 
 ## Layout
 
+Shared, agent-agnostic runtime lives in the top-level `common/` package
+(`common.sandbox`, `common.runner`, `common.serving`, `common.config`).
+This package holds only the audit-specific pieces:
+
 ```
 src/internal_auditor/
 ├── agent.py            orchestrator (root_agent); calls specialists as FunctionTools
 ├── log_analyzer.py     log analyzer specialist (claim → inner LLM → release)
 ├── asset_inspector.py  asset inspector specialist (same shape)
-├── sandbox.py          SandboxClaim lifecycle helper (k8s-agent-sandbox client)
-├── _inner_run.py       runs a one-shot inner LlmAgent and returns its final text
-├── config.py           env-driven config (SANDBOX_MODE, warm pools, model, ...)
-└── server.py           FastAPI entry (internal-auditor-server)
+├── schemas.py          output JSON shapes (single source of truth)
+├── config.py           audit-specific config (model, warm pools, project)
+└── server.py           /audit route + request/response models; scaffolding from common.serving
 
 tests/test_smoke.py          import + shape tests (no cluster, no Gemini)
 Dockerfile + .dockerignore   container image
@@ -39,6 +42,10 @@ deployment/k8s/              GKE manifests: orchestrator Deployment, warm pools,
 gcp_setup/                   one-time BQ + Firestore setup (used later)
 deployment/terraform/        TF for BQ + Firestore (used later)
 ```
+
+The claim lifecycle, the ADK run loop, `/healthz`, and the
+`SANDBOX_MODE` / `SANDBOX_NAMESPACE` / `MCP_SERVER_PORT` knobs all come
+from `common/` and are reused by every agent.
 
 ## Run locally with `adk web`
 

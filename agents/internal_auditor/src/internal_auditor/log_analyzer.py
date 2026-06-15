@@ -17,9 +17,10 @@ from google.adk.tools.mcp_tool.mcp_toolset import (
     StreamableHTTPConnectionParams,
 )
 
+from common.runner import run_agent
+from common.sandbox import claim_mcp_endpoint
+
 from internal_auditor import config, schemas
-from internal_auditor._inner_run import run_inner_agent
-from internal_auditor.sandbox import claim_mcp_endpoint
 
 
 LOG_ANALYZER_INSTRUCTION = f"""\
@@ -78,7 +79,9 @@ async def log_analyzer(request: str) -> str:
             instruction=LOG_ANALYZER_INSTRUCTION,
             tools=[toolset],
         )
-        return await run_inner_agent(inner_agent, request, user_id="log_analyzer")
+        return await run_agent(
+            inner_agent, request, app_name=config.APP_NAME, user_id="log_analyzer"
+        )
 
 
 log_analyzer_tool = FunctionTool(func=log_analyzer)

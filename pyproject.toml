@@ -6,6 +6,13 @@ requires-python = ">=3.10"
 
 [tool.uv.workspace]
 members = [
+    "common",
     "mcp_servers/*",
     "agents/*",
 ]
+
+# Each package has its own tests/test_smoke.py; importlib mode lets pytest
+# collect them together without basename collisions (no __init__.py needed).
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true

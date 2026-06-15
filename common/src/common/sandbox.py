@@ -14,21 +14,21 @@ API (verified against k8s-agent-sandbox 0.4/0.5):
   await sandbox.get_pod_ip() -> str | None         # bound pod IP
   await sandbox.terminate()                         # close + delete claim
 
-We talk to the MCP server directly over the cluster pod network
-(orchestrator runs in-cluster), so we build the URL from the pod IP
+We talk to the MCP server directly over the cluster pod network (the
+claiming agent runs in-cluster), so we build the URL from the pod IP
 ourselves rather than using the client's command/file connectors -
 hence SandboxInClusterConnectionConfig(use_pod_ip=True). The MCP-only
 pods run no in-pod agent sidecar; that's fine because create_sandbox
 opens no data-plane connection and the connectors are never invoked.
 
 A `shutdown_after_seconds` TTL is set on each claim as a backstop: if
-the orchestrator crashes between claim and terminate(), the controller
-reaps the leaked claim instead of pinning a warm-pool slot forever.
+the claiming process crashes between claim and terminate(), the
+controller reaps the leaked claim instead of pinning a warm-pool slot
+forever.
 
-When SANDBOX_MODE=local, this module short-circuits to the static
-GCP_*_MCP_URL configured in `config.py` so that `adk web` and unit
-tests work without cluster access (and without the k8s-agent-sandbox
-async deps installed).
+When SANDBOX_MODE=local, this module short-circuits to a static URL the
+caller supplies so that `adk web` and unit tests work without cluster
+access (and without the k8s-agent-sandbox async deps installed).
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from internal_auditor import config
+from common import config
 
 
 @asynccontextmanager

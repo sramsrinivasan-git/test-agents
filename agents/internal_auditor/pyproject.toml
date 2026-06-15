@@ -4,17 +4,18 @@ version = "0.1.0"
 description = "Internal Auditor: orchestrator + specialist agents on Google ADK + Gemini."
 requires-python = ">=3.10"
 dependencies = [
+    "aaas-common",
     "google-adk>=0.5",
     "google-genai>=0.7",
     "mcp>=1.0",
-    "k8s-agent-sandbox[async]>=0.4.6,<0.6",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
 ]
 
 [project.scripts]
 internal-auditor-server = "internal_auditor.server:main"
+
+[tool.uv.sources]
+aaas-common = { workspace = true }
 
 [build-system]
 requires = ["setuptools>=68"]

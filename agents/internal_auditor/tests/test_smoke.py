@@ -1,8 +1,8 @@
 """Smoke tests: confirm the agents and tools build without raising.
 
 Doesn't hit the MCP servers, the Gemini API, or the Kubernetes API.
-The per-call sandbox claim only fires when a specialist function is
-awaited, so importing alone is safe.
+The per-call sandbox claim (in common.sandbox) only fires when a
+specialist function is awaited, so importing alone is safe.
 """
 
 from __future__ import annotations
@@ -29,12 +29,3 @@ def test_asset_inspector_specialist_function_is_async() -> None:
     from internal_auditor.asset_inspector import asset_inspector
 
     assert inspect.iscoroutinefunction(asset_inspector)
-
-
-def test_sandbox_helper_is_async_context_manager_factory() -> None:
-    from internal_auditor.sandbox import claim_mcp_endpoint
-
-    # Calling it returns an async context manager (no actual claim
-    # happens until __aenter__ runs).
-    cm = claim_mcp_endpoint("fake-pool", local_fallback_url="http://x/mcp")
-    assert hasattr(cm, "__aenter__") and hasattr(cm, "__aexit__")
