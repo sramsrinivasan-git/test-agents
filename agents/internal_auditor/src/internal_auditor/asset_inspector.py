@@ -17,12 +17,12 @@ from google.adk.tools.mcp_tool.mcp_toolset import (
     StreamableHTTPServerParams,
 )
 
-from internal_auditor import config
+from internal_auditor import config, schemas
 from internal_auditor._inner_run import run_inner_agent
 from internal_auditor.sandbox import claim_mcp_endpoint
 
 
-ASSET_INSPECTOR_INSTRUCTION = """\
+ASSET_INSPECTOR_INSTRUCTION = f"""\
 You are the Asset Inspector specialist inside the Internal Auditor.
 
 Goal: given a time window and optional filters (resource type, project,
@@ -35,14 +35,7 @@ description says when to use it. Prefer the narrowest query that answers
 the orchestrator's question.
 
 Output (JSON, single object - this is your final response):
-{
-  "tool_used": "<which MCP tool you called>",
-  "window_end": "<ISO timestamp the snapshot is anchored at>",
-  "filters": { ... what you actually passed ... },
-  "total_assets": <int>,
-  "assets": [ ... raw entries from the MCP tool, untouched ... ],
-  "summary": "<one-paragraph human-readable summary of what you saw>"
-}
+{schemas.ASSET_INSPECTOR_FINDINGS}
 
 CRITICAL constraints:
 - Do NOT label any binding or resource as a violation, suspicious, over-

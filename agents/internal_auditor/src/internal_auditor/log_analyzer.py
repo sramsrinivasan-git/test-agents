@@ -17,12 +17,12 @@ from google.adk.tools.mcp_tool.mcp_toolset import (
     StreamableHTTPServerParams,
 )
 
-from internal_auditor import config
+from internal_auditor import config, schemas
 from internal_auditor._inner_run import run_inner_agent
 from internal_auditor.sandbox import claim_mcp_endpoint
 
 
-LOG_ANALYZER_INSTRUCTION = """\
+LOG_ANALYZER_INSTRUCTION = f"""\
 You are the Log Analyzer specialist inside the Internal Auditor.
 
 Goal: given a time window (and optional filters like resource_type,
@@ -35,14 +35,7 @@ own description says when to use it. Prefer the narrowest query that
 answers the question, and always include a time bound.
 
 Output (JSON, single object - this is your final response):
-{
-  "tool_used": "<which MCP tool you called>",
-  "window_hours": <number>,
-  "filters": { ... what you actually passed ... },
-  "total_entries": <int>,
-  "entries": [ ... raw entries from the MCP tool, untouched ... ],
-  "summary": "<one-paragraph human-readable summary of what you saw>"
-}
+{schemas.LOG_ANALYZER_FINDINGS}
 
 CRITICAL constraints:
 - Do NOT label any entry as a violation, suspicious, anomalous, etc.

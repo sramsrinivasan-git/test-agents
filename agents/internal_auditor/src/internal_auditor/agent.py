@@ -31,11 +31,12 @@ from __future__ import annotations
 
 from google.adk.agents import LlmAgent
 
+from internal_auditor import schemas
 from internal_auditor.asset_inspector import asset_inspector_tool
 from internal_auditor.config import GEMINI_MODEL
 from internal_auditor.log_analyzer import log_analyzer_tool
 
-ORCHESTRATOR_INSTRUCTION = """\
+ORCHESTRATOR_INSTRUCTION = f"""\
 You are the Internal Auditor Orchestrator. You are the root agent and
 you remain in control of the conversation throughout the run.
 
@@ -60,16 +61,7 @@ Workflow (same for both trigger types):
    Issue both tool calls together so they run concurrently. Wait for
    both returns.
 2. Merge the two structured findings into a single JSON object:
-   {
-     "run_id": "<run_id from input>",
-     "trigger_type": "<scheduled|on_demand from input, verbatim>",
-     "lookback_hours": <float>,
-     "findings": {
-       "log_analyzer":    <whatever log_analyzer returned, verbatim>,
-       "asset_inspector": <whatever asset_inspector returned, verbatim>
-     },
-     "next_step": "policy_evaluation_pending"
-   }
+{schemas.AUDIT_REPORT}
 3. Stop. Do not classify anything as a violation. Do not write to
    BigQuery, Firestore, or anywhere else. The Policy Agent (future
    phase) consumes this output and gates any storage writes.
