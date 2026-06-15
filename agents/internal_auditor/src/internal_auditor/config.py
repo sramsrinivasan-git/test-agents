@@ -47,6 +47,15 @@ GCP_CLOUD_ASSET_WARMPOOL: str = os.environ.get(
 # Dockerfile EXPOSE on the MCP server image.
 MCP_SERVER_PORT: int = int(os.environ.get("MCP_SERVER_PORT", "8080"))
 
+# Backstop TTL on each SandboxClaim. The happy path deletes the claim
+# explicitly when the tool call finishes; this only matters if the
+# orchestrator crashes mid-call, in which case the controller reaps the
+# leaked claim after this many seconds. Must comfortably exceed the
+# longest expected single tool call (MCP query + inner-LLM reasoning).
+SANDBOX_CLAIM_TTL_SECONDS: int = int(
+    os.environ.get("SANDBOX_CLAIM_TTL_SECONDS", "900")
+)
+
 # Local-mode fallback URLs. Only read when SANDBOX_MODE=local. Set these
 # to your port-forwarded endpoints, e.g.
 #   kubectl -n mcp-servers port-forward svc/gcp-log-analyzer-mcp 18080:8080

@@ -14,7 +14,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import (
     MCPToolset,
-    StreamableHTTPServerParams,
+    StreamableHTTPConnectionParams,
 )
 
 from internal_auditor import config, schemas
@@ -69,7 +69,7 @@ async def log_analyzer(request: str) -> str:
         local_fallback_url=config.GCP_LOG_ANALYZER_MCP_URL,
     ) as endpoint:
         toolset = MCPToolset(
-            connection_params=StreamableHTTPServerParams(url=endpoint),
+            connection_params=StreamableHTTPConnectionParams(url=endpoint),
         )
         inner_agent = LlmAgent(
             name="log_analyzer",

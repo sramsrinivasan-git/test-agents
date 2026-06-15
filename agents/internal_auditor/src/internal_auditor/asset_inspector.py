@@ -14,7 +14,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import (
     MCPToolset,
-    StreamableHTTPServerParams,
+    StreamableHTTPConnectionParams,
 )
 
 from internal_auditor import config, schemas
@@ -68,7 +68,7 @@ async def asset_inspector(request: str) -> str:
         local_fallback_url=config.GCP_CLOUD_ASSET_MCP_URL,
     ) as endpoint:
         toolset = MCPToolset(
-            connection_params=StreamableHTTPServerParams(url=endpoint),
+            connection_params=StreamableHTTPConnectionParams(url=endpoint),
         )
         inner_agent = LlmAgent(
             name="asset_inspector",
