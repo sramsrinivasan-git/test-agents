@@ -1,13 +1,12 @@
 [project]
 name = "aaas-common"
 version = "0.1.0"
-description = "Shared runtime for AaaS agents on GKE: sandbox claims, ADK runner, FastAPI serving."
+description = "Shared runtime for AaaS agents on GKE: sandbox claims, ADK runner, Pub/Sub subscriber, liveness heartbeat."
 requires-python = ">=3.10"
 dependencies = [
     "google-adk>=0.5",
     "google-genai>=0.7",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
+    "google-cloud-pubsub>=2.20",
     "k8s-agent-sandbox[async]>=0.4.6,<0.6",
 ]
 

@@ -9,7 +9,7 @@ COPY src/ ./src/
 
 RUN uv pip install --system .
 
-ENV PORT=8080
-EXPOSE 8080
-
-CMD ["internal-auditor-server"]
+# No EXPOSE: this container is a Pub/Sub subscriber, not an HTTP service.
+# Liveness is detected via the heartbeat file written by common.heartbeat;
+# see the exec livenessProbe in deployment/k8s/deployment.yaml.
+CMD ["internal-auditor-subscriber"]

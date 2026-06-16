@@ -22,9 +22,9 @@ spec:
           # us-central1-docker.pkg.dev/PROJECT_ID/agents/internal-auditor:0.1.0
           image: REPLACE_WITH_ARTIFACT_REGISTRY_IMAGE
           imagePullPolicy: IfNotPresent
-          ports:
-            - name: http
-              containerPort: 8080
+          # No ports / Service: this pod is a Pub/Sub subscriber, not an
+          # HTTP server. Triggers arrive on PUBSUB_TRIGGER_SUBSCRIPTION;
+          # results land in Cloud Logging keyed by run_id.
           env:
             - name: GEMINI_MODEL
               value: "gemini-3-flash"
@@ -52,17 +52,25 @@ spec:
               value: "us-central1"
             - name: GOOGLE_GENAI_USE_VERTEXAI
               value: "true"
-          readinessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            # Pub/Sub subscription this pod pulls audit triggers from.
+            # Topic + subscription are created out-of-band (see the
+            # k8s deployment README for the gcloud commands). The bound
+            # GSA needs roles/pubsub.subscriber on this subscription.
+            - name: PUBSUB_TRIGGER_SUBSCRIPTION
+              value: "internal-auditor-triggers-sub"
+            - name: PUBSUB_MAX_CONCURRENT
+              value: "1"
+          # Liveness via the heartbeat file written by common.heartbeat.tick().
+          # Stale-after-90s; the subscriber backstops every 15s so a quiet
+          # period (no messages) doesn't get the pod killed. Detects a
+          # deadlocked subscriber, unlike a TCP/HTTP probe.
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: http
-            initialDelaySeconds: 20
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - 'test -f /tmp/alive && test $(($(date +%s) - $(stat -c %Y /tmp/alive))) -lt 90'
+            initialDelaySeconds: 30
             periodSeconds: 30
           resources:
             requests:

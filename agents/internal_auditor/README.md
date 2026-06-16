@@ -11,7 +11,9 @@ Implements three of the agents from [`plan.md`](../../plan.md):
 
 Each specialist tool call **claims a fresh sandboxed MCP server pod**
 from a GKE Agent Sandbox warm pool, uses it for that single call, and
-releases it. The orchestrator itself runs as a regular long-running pod.
+releases it. The orchestrator itself runs as a long-running pod that
+**subscribes to a Pub/Sub topic** for audit triggers; results land in
+Cloud Logging keyed by `run_id`.
 
 Not yet implemented (see `src/agent.py` header for the list):
 Agent Behavior Evaluator, Policy Evaluator, Alert Dispatcher,
@@ -23,8 +25,9 @@ Built on **Google ADK** with **Gemini 3 Flash**. Designed to run on
 ## Layout
 
 Shared, agent-agnostic runtime lives in the top-level `common/` package
-(`common.sandbox`, `common.runner`, `common.serving`, `common.config`).
-This package holds only the audit-specific pieces:
+(`common.sandbox`, `common.runner`, `common.pubsub`, `common.heartbeat`,
+`common.ids`, `common.config`). This package holds only the audit-
+specific pieces:
 
 ```
 src/internal_auditor/
@@ -33,26 +36,26 @@ src/internal_auditor/
 ├── asset_inspector.py  asset inspector specialist (same shape)
 ├── schemas.py          output JSON shapes (single source of truth)
 ├── config.py           audit-specific config (model, warm pools, project)
-└── server.py           /audit route + request/response models; scaffolding from common.serving
+└── subscriber.py       Pub/Sub entrypoint: pull trigger → run root_agent → log result
 
 tests/test_smoke.py          import + shape tests (no cluster, no Gemini)
-Dockerfile + .dockerignore   container image
+Dockerfile + .dockerignore   container image (CMD: internal-auditor-subscriber)
 deployment/k8s/              GKE manifests: orchestrator Deployment, warm pools,
                              RBAC for sandbox claims, walkthrough README
 gcp_setup/                   one-time BQ + Firestore setup (used later)
 deployment/terraform/        TF for BQ + Firestore (used later)
 ```
 
-The claim lifecycle, the ADK run loop, `/healthz`, and the
-`SANDBOX_MODE` / `SANDBOX_NAMESPACE` / `MCP_SERVER_PORT` knobs all come
-from `common/` and are reused by every agent.
+The claim lifecycle, the ADK run loop, the Pub/Sub subscriber loop, the
+liveness heartbeat, and the `SANDBOX_*` / `MCP_SERVER_PORT` knobs all
+come from `common/` and are reused by every agent.
 
 ## Run locally with `adk web`
 
-The full path (real `SandboxClaim` against a real cluster) requires
-kube access. For local development you can run in `SANDBOX_MODE=local`
-which skips claims and connects to a static MCP server URL — point it
-at a port-forwarded MCP server pod.
+For interactive development, `adk web` imports `root_agent` directly and
+bypasses Pub/Sub entirely - the subscriber is a production-only entry
+point. `SANDBOX_MODE=local` skips the cluster claim path and points each
+specialist at a static MCP server URL (handy with a port-forward).
 
 ```bash
 uv sync                                       # from repo root
@@ -68,7 +71,6 @@ kubectl -n default port-forward pod/<another-warmpool-pod> 18081:8080 &  # gcp-c
 export GCP_LOG_ANALYZER_MCP_URL=http://localhost:18080/mcp
 export GCP_CLOUD_ASSET_MCP_URL=http://localhost:18081/mcp
 
-# Interactive UI:
 cd agents/internal_auditor/src   # adk web auto-discovers packages in cwd
 adk web                          # opens http://localhost:8000
 ```
@@ -79,23 +81,22 @@ send a message like:
 
 You'll see the orchestrator fan out to `log_analyzer` + `asset_inspector`
 in parallel and return the merged JSON. (`trigger_type` is `scheduled`
-when a Cloud Scheduler cron fires the run, `on_demand` for everything
-else — the workflow is the same either way.)
+when a Cloud Scheduler cron publishes the trigger, `on_demand` for ad-hoc
+publishes — the workflow is the same either way.)
 
 ## Deploy to GKE
 
 See [`deployment/k8s/README.md`](deployment/k8s/README.md). Quick summary:
 
-1. Build + push three images (orchestrator + both MCP servers).
-2. Apply `serviceaccount.yaml`, `deployment.yaml`, `service.yaml` for
-   the orchestrator.
-3. Apply `sandbox-log-analyzer.yaml` and `sandbox-cloud-asset.yaml` —
-   these create the `SandboxTemplate` + `SandboxWarmPool` per server type.
-4. Apply `rbac.yaml` so the orchestrator's K8s ServiceAccount can
-   create / get / delete `SandboxClaim` resources.
+1. Build + push the orchestrator image (MCP server images per their own DEPLOY.md).
+2. Create the Pub/Sub topic + subscription (`internal-auditor-triggers`).
+3. Apply `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
+4. Apply the sandbox manifests (`sandbox-log-analyzer.yaml`, `sandbox-cloud-asset.yaml`).
+5. Wire Cloud Scheduler to publish to the topic on a cron.
+6. Ad-hoc audits: `gcloud pubsub topics publish ...`.
 
 ## Tests
 
 ```bash
-uv run pytest agents/internal_auditor/tests
+uv run --all-packages --with pytest python -m pytest agents/internal_auditor/tests
 ```

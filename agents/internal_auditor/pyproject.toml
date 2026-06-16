@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-internal-auditor-server = "internal_auditor.server:main"
+internal-auditor-subscriber = "internal_auditor.subscriber:main"
 
 [tool.uv.sources]
 aaas-common = { workspace = true }
