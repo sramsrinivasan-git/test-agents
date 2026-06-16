@@ -10,22 +10,29 @@ Embed them with an f-string in the agent's instruction:
 
     from internal_auditor import schemas
     INSTRUCTION = f"... Output schema:\n{schemas.LOG_ANALYZER_FINDINGS} ..."
+
+Note on what the LLM is and isn't asked to produce:
+- `tool_used` / `filters_used` are provenance: the specialist echoes
+  back what it itself decided to send to the MCP tool. They are not
+  inputs handed to the specialist.
+- `entries` / `assets` are copied verbatim from the MCP tool response.
+- `summary` is the one field where the LLM does real natural-language
+  work; everything else is mechanical.
+- Counts are deliberately NOT in the schema. LLMs miscount; downstream
+  consumers can compute len(entries) in code.
 """
 
 from __future__ import annotations
 
 
-# Returned by the log_analyzer specialist. `entries` and `total_entries`
-# carry the raw MCP-tool response untouched - we don't reshape the audit
-# log records here.
+# Returned by the log_analyzer specialist.
 LOG_ANALYZER_FINDINGS = """\
 {
   "tool_used": "<which MCP tool you called>",
   "window_hours": <number>,
-  "filters": { ... what you actually passed ... },
-  "total_entries": <int>,
-  "entries": [ ... raw entries from the MCP tool, untouched ... ],
-  "summary": "<one-paragraph human-readable summary of what you saw>"
+  "filters_used": { ... the filter args YOU composed and passed to the MCP tool ... },
+  "entries": [ ... raw entries from the MCP tool, copied verbatim ... ],
+  "summary": "<one-paragraph factual description of what you saw - no judgement>"
 }"""
 
 
@@ -37,10 +44,9 @@ ASSET_INSPECTOR_FINDINGS = """\
 {
   "tool_used": "<which MCP tool you called>",
   "window_end": "<ISO timestamp the snapshot is anchored at>",
-  "filters": { ... what you actually passed ... },
-  "total_assets": <int>,
-  "assets": [ ... raw entries from the MCP tool, untouched ... ],
-  "summary": "<one-paragraph human-readable summary of what you saw>"
+  "filters_used": { ... the filter args YOU composed and passed to the MCP tool ... },
+  "assets": [ ... raw entries from the MCP tool, copied verbatim ... ],
+  "summary": "<one-paragraph factual description of what you saw - no judgement>"
 }"""
 
 
