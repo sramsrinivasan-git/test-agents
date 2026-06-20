@@ -66,34 +66,27 @@ glue (RBAC for claims, Pub/Sub trigger plumbing).
 > pull on the subscription as its first action; if the subscription
 > doesn't exist, the pod crash-loops with a `NotFound` error.
 
-```bash
-gcloud services enable pubsub.googleapis.com --project="$PROJECT_ID"
-
-gcloud pubsub topics create internal-auditor-triggers \
-  --project="$PROJECT_ID"
-
-gcloud pubsub subscriptions create internal-auditor-triggers-sub \
-  --project="$PROJECT_ID" \
-  --topic=internal-auditor-triggers \
-  --ack-deadline=600 \
-  --message-retention-duration=1d \
-  --expiration-period=never
-```
-
-`--ack-deadline=600` (10 minutes) gives an audit room to finish before
-Pub/Sub redelivers. Set it higher if audits ever exceed this.
-
-Optional but recommended: a DLQ for poison messages.
+Pub/Sub setup lives with the other one-time GCP storage setup in
+[`../../gcp_setup/`](../../gcp_setup/). See
+[`gcp_setup/DEPLOY.md` §4](../../gcp_setup/DEPLOY.md) for the Console
+walkthrough and IAM details. One-shot script:
 
 ```bash
-gcloud pubsub topics create internal-auditor-triggers-dlq \
-  --project="$PROJECT_ID"
+export PROJECT_ID=my-project
+export GSA_EMAIL="internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com"
+agents/internal_auditor/gcp_setup/create_pubsub.sh
 
-gcloud pubsub subscriptions update internal-auditor-triggers-sub \
-  --project="$PROJECT_ID" \
-  --dead-letter-topic=internal-auditor-triggers-dlq \
-  --max-delivery-attempts=5
+# With DLQ for poison messages (recommended):
+CREATE_DLQ=1 agents/internal_auditor/gcp_setup/create_pubsub.sh
 ```
+
+The script enables the API, creates the topic + subscription
+(`internal-auditor-triggers` / `internal-auditor-triggers-sub`,
+ack-deadline 10 min), and grants the GSA `roles/pubsub.subscriber`
+on the subscription. Idempotent — re-runs are safe.
+
+Step 3 below covers creating `GSA_EMAIL` itself if you haven't yet;
+in that case, do step 3 *first*, then this step.
 
 ## 3. Orchestrator service account (one-time)
 
@@ -107,11 +100,8 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/aiplatform.user"
 
-# Pub/Sub subscriber on the trigger subscription.
-gcloud pubsub subscriptions add-iam-policy-binding internal-auditor-triggers-sub \
-  --project="$PROJECT_ID" \
-  --member="serviceAccount:internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/pubsub.subscriber"
+# (Pub/Sub subscriber on the trigger subscription is granted by step 2's
+#  create_pubsub.sh; not repeated here.)
 
 # Workload Identity binding: K8s SA in `agents` impersonates the GSA.
 gcloud iam service-accounts add-iam-policy-binding \

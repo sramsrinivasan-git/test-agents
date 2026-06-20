@@ -113,13 +113,14 @@ full walkthrough. Quick summary of what has to happen, in order
 (the order matters — the pod crash-loops if Pub/Sub doesn't exist
 when it boots):
 
-1. **Create the Pub/Sub topic + subscription first**
-   (`internal-auditor-triggers` / `internal-auditor-triggers-sub`) —
-   the pod's subscriber call fails immediately if the subscription
-   doesn't exist. See deploy README step 2 for the 3 gcloud commands.
-2. **Create the orchestrator GSA** and grant it `roles/aiplatform.user`
-   (Gemini) + `roles/pubsub.subscriber` on the subscription. Bind it
-   to the K8s SA via Workload Identity. Deploy README step 3.
+1. **Create the orchestrator GSA** and grant it `roles/aiplatform.user`
+   (Gemini). Bind it to the K8s SA via Workload Identity. Deploy README
+   step 3.
+2. **Create the Pub/Sub topic + subscription** and grant the GSA
+   `roles/pubsub.subscriber` on it. The pod's subscriber call fails
+   immediately if the subscription doesn't exist when it boots, so this
+   has to happen before step 4. Run [`gcp_setup/create_pubsub.sh`](gcp_setup/create_pubsub.sh)
+   (covered in [`gcp_setup/DEPLOY.md` §4](gcp_setup/DEPLOY.md)).
 3. **Build + push** the orchestrator image to Artifact Registry
    (MCP server images per their own DEPLOY.md). Step 4.
 4. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
