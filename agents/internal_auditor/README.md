@@ -55,7 +55,9 @@ come from `common/` and are reused by every agent.
 For interactive development, `adk web` imports `root_agent` directly and
 bypasses Pub/Sub entirely - the subscriber is a production-only entry
 point. `SANDBOX_MODE=local` skips the cluster claim path and points each
-specialist at a static MCP server URL (handy with a port-forward).
+specialist at a static MCP server URL.
+
+Common setup (all variants):
 
 ```bash
 uv sync                                       # from repo root
@@ -63,14 +65,34 @@ export GEMINI_MODEL=gemini-3-flash
 export GOOGLE_CLOUD_PROJECT=my-project
 export GOOGLE_GENAI_USE_VERTEXAI=true
 export GOOGLE_CLOUD_LOCATION=us-central1
-
-# Local-mode wiring: skip SandboxClaim, talk to port-forwarded MCP pods.
 export SANDBOX_MODE=local
+```
+
+Then pick a variant for the MCP URLs:
+
+**Variant 1 - no MCP at all (fastest smoke test).** Point at unreachable
+URLs; specialists fail fast, orchestrator wraps the errors in `findings`
+and returns the merged JSON. Verifies the agent loop without any MCP
+infrastructure.
+
+```bash
+export GCP_LOG_ANALYZER_MCP_URL=http://localhost:1/mcp
+export GCP_CLOUD_ASSET_MCP_URL=http://localhost:1/mcp
+```
+
+**Variant 2 - port-forward to MCP pods.** Talk to real MCP servers
+running in a cluster (skip claim semantics).
+
+```bash
 kubectl -n default port-forward pod/<a-warmpool-pod> 18080:8080 &     # gcp-log-analyzer
 kubectl -n default port-forward pod/<another-warmpool-pod> 18081:8080 &  # gcp-cloud-asset
 export GCP_LOG_ANALYZER_MCP_URL=http://localhost:18080/mcp
 export GCP_CLOUD_ASSET_MCP_URL=http://localhost:18081/mcp
+```
 
+Then launch the UI:
+
+```bash
 cd agents/internal_auditor/src   # adk web auto-discovers packages in cwd
 adk web                          # opens http://localhost:8000
 ```

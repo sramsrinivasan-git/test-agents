@@ -148,6 +148,38 @@ kubectl apply -f agents/internal_auditor/deployment/k8s/rbac.yaml
 
 No `service.yaml` — the orchestrator has no HTTP surface.
 
+---
+
+### Profile A — smoke test without the MCP warm pools
+
+If you want to validate the GKE + Pub/Sub plumbing **before** the MCP
+servers are migrated to warm pools (e.g. they still live on Cloud Run,
+or you just want a fast smoke test), deploy the orchestrator in
+`SANDBOX_MODE=local` pointing at deliberately unreachable URLs. The
+specialists will fail their MCP calls fast, the orchestrator wraps
+each failure in its `findings` slot (per its instruction) and the
+audit completes normally. Every layer this repo builds is exercised
+except the MCP calls themselves.
+
+Patch the env block in `deployment.yaml` for this profile:
+
+```yaml
+- name: SANDBOX_MODE
+  value: "local"                          # was "cluster"
+- name: GCP_LOG_ANALYZER_MCP_URL
+  value: "http://localhost:1/mcp"         # deliberately unreachable
+- name: GCP_CLOUD_ASSET_MCP_URL
+  value: "http://localhost:1/mcp"
+```
+
+You can also skip applying `rbac.yaml` for this profile — local mode
+never creates SandboxClaim resources, so the RBAC isn't needed.
+
+Revert both changes (and apply `rbac.yaml`) once you're ready to wire
+in real warm pools.
+
+---
+
 ## 6. Smoke-test by publishing a trigger
 
 ```bash
@@ -161,7 +193,7 @@ Watch the orchestrator pull it and run:
 ```bash
 kubectl -n agents logs deployment/internal-auditor -f
 
-# In another shell, watch claims fly while the audit runs:
+# In another shell, watch claims fly while the audit runs (cluster-mode only):
 kubectl -n default get sandboxclaims -w
 ```
 
