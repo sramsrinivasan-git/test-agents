@@ -108,14 +108,28 @@ publishes — the workflow is the same either way.)
 
 ## Deploy to GKE
 
-See [`deployment/k8s/README.md`](deployment/k8s/README.md). Quick summary:
+See [`deployment/k8s/README.md`](deployment/k8s/README.md) for the
+full walkthrough. Quick summary of what has to happen, in order
+(the order matters — the pod crash-loops if Pub/Sub doesn't exist
+when it boots):
 
-1. Build + push the orchestrator image (MCP server images per their own DEPLOY.md).
-2. Create the Pub/Sub topic + subscription (`internal-auditor-triggers`).
-3. Apply `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
-4. Apply the sandbox manifests (`sandbox-log-analyzer.yaml`, `sandbox-cloud-asset.yaml`).
-5. Wire Cloud Scheduler to publish to the topic on a cron.
-6. Ad-hoc audits: `gcloud pubsub topics publish ...`.
+1. **Create the Pub/Sub topic + subscription first**
+   (`internal-auditor-triggers` / `internal-auditor-triggers-sub`) —
+   the pod's subscriber call fails immediately if the subscription
+   doesn't exist. See deploy README step 2 for the 3 gcloud commands.
+2. **Create the orchestrator GSA** and grant it `roles/aiplatform.user`
+   (Gemini) + `roles/pubsub.subscriber` on the subscription. Bind it
+   to the K8s SA via Workload Identity. Deploy README step 3.
+3. **Build + push** the orchestrator image to Artifact Registry
+   (MCP server images per their own DEPLOY.md). Step 4.
+4. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
+   Step 5.
+5. **Apply** the sandbox manifests (`sandbox-log-analyzer.yaml`,
+   `sandbox-cloud-asset.yaml`) once the MCP servers are ready to run
+   in warm pools. For an MCP-less smoke first, see "Profile A" in
+   deploy README step 5.
+6. **Wire Cloud Scheduler** to publish to the topic on a cron. Step 7.
+7. **Ad-hoc audits:** `gcloud pubsub topics publish internal-auditor-triggers ...`.
 
 ## Tests
 

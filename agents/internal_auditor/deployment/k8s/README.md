@@ -62,7 +62,13 @@ glue (RBAC for claims, Pub/Sub trigger plumbing).
 
 ## 2. Pub/Sub topic + subscription (one-time)
 
+> **Do this BEFORE step 5.** The orchestrator pod opens a streaming
+> pull on the subscription as its first action; if the subscription
+> doesn't exist, the pod crash-loops with a `NotFound` error.
+
 ```bash
+gcloud services enable pubsub.googleapis.com --project="$PROJECT_ID"
+
 gcloud pubsub topics create internal-auditor-triggers \
   --project="$PROJECT_ID"
 
