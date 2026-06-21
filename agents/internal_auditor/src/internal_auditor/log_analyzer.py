@@ -74,7 +74,7 @@ async def log_analyzer(request: str) -> str:
         )
         inner_agent = LlmAgent(
             name="log_analyzer",
-            model=config.GEMINI_MODEL,
+            model=config.SPECIALIST_MODEL,
             description="Cloud Logging audit-event specialist.",
             instruction=LOG_ANALYZER_INSTRUCTION,
             tools=[toolset],

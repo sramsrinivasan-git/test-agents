@@ -33,7 +33,7 @@ from google.adk.agents import LlmAgent
 
 from internal_auditor import schemas
 from internal_auditor.asset_inspector import asset_inspector_tool
-from internal_auditor.config import GEMINI_MODEL
+from internal_auditor.config import ORCHESTRATOR_MODEL
 from internal_auditor.log_analyzer import log_analyzer_tool
 
 ORCHESTRATOR_INSTRUCTION = f"""\
@@ -75,7 +75,7 @@ one specialist failed.
 
 root_agent = LlmAgent(
     name="orchestrator",
-    model=GEMINI_MODEL,
+    model=ORCHESTRATOR_MODEL,
     description=(
         "Internal Auditor root agent. Receives audit triggers and calls "
         "specialist agents (log_analyzer, asset_inspector) as tools in "

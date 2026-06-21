@@ -10,7 +10,15 @@ from __future__ import annotations
 
 import os
 
-GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-3-flash")
+# Per-agent Gemini model selection.
+# - Orchestrator runs Pro: it coordinates, merges findings, and (with
+#   the future Policy Agent) drives the replan loop - all reasoning-
+#   heavy steps that benefit from the stronger model.
+# - Specialists run Flash: their job is to pick the right MCP tool
+#   and translate the orchestrator's brief into a tool call. Cheaper /
+#   faster suits this well; the LLM isn't doing deep reasoning.
+ORCHESTRATOR_MODEL: str = os.environ.get("ORCHESTRATOR_MODEL", "gemini-3-pro")
+SPECIALIST_MODEL: str = os.environ.get("SPECIALIST_MODEL", "gemini-3-flash")
 
 # Default GCP project the MCP tools fall through to when the orchestrator
 # doesn't override `project_id` per-call.

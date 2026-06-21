@@ -61,7 +61,9 @@ Common setup (all variants):
 
 ```bash
 uv sync                                       # from repo root
-export GEMINI_MODEL=gemini-3-flash
+# Model defaults live in internal_auditor.config (ORCHESTRATOR_MODEL=pro,
+# SPECIALIST_MODEL=flash). Only export overrides if you want to change
+# them per-environment.
 export GOOGLE_CLOUD_PROJECT=my-project
 export GOOGLE_GENAI_USE_VERTEXAI=true
 export GOOGLE_CLOUD_LOCATION=us-central1

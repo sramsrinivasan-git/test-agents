@@ -26,8 +26,11 @@ spec:
           # HTTP server. Triggers arrive on PUBSUB_TRIGGER_SUBSCRIPTION;
           # results land in Cloud Logging keyed by run_id.
           env:
-            - name: GEMINI_MODEL
-              value: "gemini-3-flash"
+            # Model selection (ORCHESTRATOR_MODEL / SPECIALIST_MODEL)
+            # lives in internal_auditor.config with sensible defaults.
+            # Only override here if you intentionally want a non-default
+            # model per environment (e.g. flash-lite in dev).
+            #
             # Sandbox / MCP wiring. "cluster" mode means each specialist
             # tool call claims a fresh sandboxed MCP server pod from
             # the named warm pool, uses it, and releases it. See

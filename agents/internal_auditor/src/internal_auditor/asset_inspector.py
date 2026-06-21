@@ -73,7 +73,7 @@ async def asset_inspector(request: str) -> str:
         )
         inner_agent = LlmAgent(
             name="asset_inspector",
-            model=config.GEMINI_MODEL,
+            model=config.SPECIALIST_MODEL,
             description="GCP resource + IAM snapshot specialist.",
             instruction=ASSET_INSPECTOR_INSTRUCTION,
             tools=[toolset],
