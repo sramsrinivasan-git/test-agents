@@ -25,7 +25,7 @@ export LOGS_PROJECT=my-logs-project
 
 # AR repo + region.
 export REGION=us-central1
-export AR_REPO=agents
+export AR_REPO=aaas-repo               # your existing AR Docker repo
 export IMAGE_TAG=0.1.0
 export IMAGE="${REGION}-docker.pkg.dev/${HOST_PROJECT}/${AR_REPO}/gcp-log-analyzer:${IMAGE_TAG}"
 
@@ -39,35 +39,22 @@ export NAMESPACE=default              # where the warm pool lives
 
 ## 1. Enable required APIs (one-time, in HOST_PROJECT)
 
-GKE + per-server APIs the sandbox pods will need:
-
 ```bash
 gcloud services enable \
   container.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
   iamcredentials.googleapis.com \
   logging.googleapis.com \
   --project="$HOST_PROJECT"
 ```
 
-(Artifact Registry + Cloud Build APIs are enabled by the AR setup in
-step 2.)
+> The `$AR_REPO` Docker repo (e.g. `aaas-repo`) is assumed to already
+> exist in `HOST_PROJECT`. If it doesn't, create it via the Console
+> (Artifact Registry → Create repository → Docker, Standard, region
+> `$REGION`) or ask your platform team.
 
-## 2. Artifact Registry Docker repo (one-time, project-wide)
-
-The `$AR_REPO` Docker repo is shared across every agent and MCP server
-in this project — set up once with
-[`agents/internal_auditor/gcp_setup/create_artifact_registry.sh`](../../agents/internal_auditor/gcp_setup/create_artifact_registry.sh).
-See [`gcp_setup/DEPLOY.md` §5](../../agents/internal_auditor/gcp_setup/DEPLOY.md) for the Console alternative.
-
-```bash
-export PROJECT_ID="$HOST_PROJECT"      # the script's required var
-agents/internal_auditor/gcp_setup/create_artifact_registry.sh
-```
-
-Skip this if you've already run it for another image in the same
-project — the repo is project-wide.
-
-## 3. Build + push the image
+## 2. Build + push the image
 
 From the repo root (one level above `mcp_servers/`):
 
@@ -81,7 +68,7 @@ Cloud Build picks up the `Dockerfile` in `mcp_servers/gcp_log_analyzer/`,
 builds the image, and pushes to AR. The image's `ENTRYPOINT` runs the
 server with `MCP_TRANSPORT=streamable-http` listening on `:8080`.
 
-## 4. Create the GSA and grant read access to logs
+## 3. Create the GSA and grant read access to logs
 
 ```bash
 gcloud iam service-accounts create "$GSA_NAME" \
@@ -107,7 +94,7 @@ gcloud projects add-iam-policy-binding "$LOGS_PROJECT" \
 
 For data-access logs, use `roles/logging.privateLogViewer` instead.
 
-## 5. Workload Identity binding (GSA ↔ KSA)
+## 4. Workload Identity binding (GSA ↔ KSA)
 
 Lets the in-cluster KSA impersonate the GSA without a static key.
 
@@ -129,7 +116,7 @@ kubectl annotate serviceaccount "$KSA_NAME" -n "$NAMESPACE" \
 The sandbox template's `podTemplate.spec.serviceAccountName` must
 match `$KSA_NAME` so warm-pool pods pick it up.
 
-## 6. Wire the image + KSA into the SandboxTemplate
+## 5. Wire the image + KSA into the SandboxTemplate
 
 Edit
 [`agents/internal_auditor/deployment/k8s/sandbox-log-analyzer.yaml`](../../agents/internal_auditor/deployment/k8s/sandbox-log-analyzer.yaml)
@@ -144,7 +131,7 @@ The template also references `serviceAccountName: gcp-log-analyzer-mcp`
 and expects `automountServiceAccountToken: true` (Workload Identity
 needs the projected token).
 
-## 7. Apply + verify
+## 6. Apply + verify
 
 ```bash
 kubectl apply -f agents/internal_auditor/deployment/k8s/sandbox-log-analyzer.yaml

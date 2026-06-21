@@ -32,7 +32,7 @@ export ASSET_PROJECT=my-asset-project
 
 # AR repo + region.
 export REGION=us-central1
-export AR_REPO=agents
+export AR_REPO=aaas-repo               # your existing AR Docker repo
 export IMAGE_TAG=0.1.0
 export IMAGE="${REGION}-docker.pkg.dev/${HOST_PROJECT}/${AR_REPO}/gcp-cloud-asset:${IMAGE_TAG}"
 
@@ -46,11 +46,11 @@ export NAMESPACE=default              # where the warm pool lives
 
 ## 1. Enable required APIs (one-time, in HOST_PROJECT)
 
-GKE + per-server APIs the sandbox pods will need:
-
 ```bash
 gcloud services enable \
   container.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
   iamcredentials.googleapis.com \
   cloudasset.googleapis.com \
   logging.googleapis.com \
@@ -60,25 +60,12 @@ gcloud services enable \
 Cloud Asset API also needs to be enabled in every **target** project,
 folder, or org you want to read from — not just `HOST_PROJECT`.
 
-(Artifact Registry + Cloud Build APIs are enabled by the AR setup in
-step 2.)
+> The `$AR_REPO` Docker repo (e.g. `aaas-repo`) is assumed to already
+> exist in `HOST_PROJECT`. If it doesn't, create it via the Console
+> (Artifact Registry → Create repository → Docker, Standard, region
+> `$REGION`) or ask your platform team.
 
-## 2. Artifact Registry Docker repo (one-time, project-wide)
-
-The `$AR_REPO` Docker repo is shared across every agent and MCP server
-in this project — set up once with
-[`agents/internal_auditor/gcp_setup/create_artifact_registry.sh`](../../agents/internal_auditor/gcp_setup/create_artifact_registry.sh).
-See [`gcp_setup/DEPLOY.md` §5](../../agents/internal_auditor/gcp_setup/DEPLOY.md) for the Console alternative.
-
-```bash
-export PROJECT_ID="$HOST_PROJECT"      # the script's required var
-agents/internal_auditor/gcp_setup/create_artifact_registry.sh
-```
-
-Skip this if you've already run it for another image in the same
-project — the repo is project-wide.
-
-## 3. Build + push the image
+## 2. Build + push the image
 
 ```bash
 gcloud builds submit mcp_servers/gcp_cloud_asset \
@@ -86,7 +73,7 @@ gcloud builds submit mcp_servers/gcp_cloud_asset \
   --tag "$IMAGE"
 ```
 
-## 4. Create the GSA
+## 3. Create the GSA
 
 ```bash
 gcloud iam service-accounts create "$GSA_NAME" \
@@ -94,7 +81,7 @@ gcloud iam service-accounts create "$GSA_NAME" \
   --display-name="GCP Cloud Asset MCP Server (sandboxed)"
 ```
 
-## 5. Grant read access on every scope you want to analyze
+## 4. Grant read access on every scope you want to analyze
 
 The image is built **once**; you repeat this step for every project /
 folder / org the server should be able to inspect — no redeploy needed.
@@ -149,7 +136,7 @@ for ROLE in roles/cloudasset.viewer roles/logging.viewer; do
 done
 ```
 
-## 6. Workload Identity binding (GSA ↔ KSA)
+## 5. Workload Identity binding (GSA ↔ KSA)
 
 Lets the in-cluster KSA impersonate the GSA without a static key.
 
@@ -171,7 +158,7 @@ kubectl annotate serviceaccount "$KSA_NAME" -n "$NAMESPACE" \
 The sandbox template's `podTemplate.spec.serviceAccountName` must
 match `$KSA_NAME` so warm-pool pods pick it up.
 
-## 7. Wire the image + KSA into the SandboxTemplate
+## 6. Wire the image + KSA into the SandboxTemplate
 
 Edit
 [`agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml`](../../agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml)
@@ -186,7 +173,7 @@ The template also references `serviceAccountName: gcp-cloud-asset-mcp`
 and expects `automountServiceAccountToken: true` (Workload Identity
 needs the projected token).
 
-## 8. Apply + verify
+## 7. Apply + verify
 
 ```bash
 kubectl apply -f agents/internal_auditor/deployment/k8s/sandbox-cloud-asset.yaml

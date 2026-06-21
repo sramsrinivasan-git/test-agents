@@ -4,12 +4,18 @@ How to create the GCP resources the Internal Auditor needs:
 
 - **Pub/Sub** topic + subscription that the orchestrator subscribes to
   for audit triggers (§4).
-- **Artifact Registry** Docker repo that holds every agent + MCP server
-  container image (§5).
 - **BigQuery** dataset + tables that hold audit runs / findings / alerts
   (§1–§2). Used by the future Policy Agent.
 - **Firestore** database + indexes + TTL for ground-truth precedents
   (§3). Used by the future Policy Agent.
+
+> **Artifact Registry is assumed to already exist** in your project as
+> a Docker repo. Image refs in this repo look like
+> `${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/<image>:<tag>` —
+> set `AR_REPO` to whatever your repo is named (e.g. `aaas-repo`).
+> Creating the AR repo (and the one-time Cloud Build IAM grant it
+> needs) is out of scope here; ask your platform team if you don't
+> have one yet.
 
 Two paths are offered for each: a click-through Console flow, and a
 Cloud Shell script. Pick whichever fits your context.
@@ -17,6 +23,7 @@ Cloud Shell script. Pick whichever fits your context.
 > **Substitute as you go.** Throughout this doc:
 > - `PROJECT_ID` = the GCP project that will host all of the above.
 > - `REGION` = Artifact Registry + GKE region, e.g. `us-central1`.
+> - `AR_REPO` = your existing Artifact Registry Docker repo name, e.g. `aaas-repo`.
 > - `BQ_LOCATION` = BigQuery dataset region, e.g. `US`, `EU`, `us-central1`.
 > - `FIRESTORE_REGION` = Firestore location, e.g. `nam5` (US multi-region),
 >   `eur3` (EU multi-region), or a single region like `us-central1`.
@@ -77,17 +84,6 @@ Already covered by `roles/datastore.owner` above.
 - **Minimum**: `roles/pubsub.admin` + `roles/serviceusage.serviceUsageAdmin`.
 - **Easy mode**: `roles/owner` on the project.
 
-### Artifact Registry (§5)
-
-| Action                                                       | Permission                                         | Minimum role                                  |
-| ------------------------------------------------------------ | -------------------------------------------------- | --------------------------------------------- |
-| Enable the AR + Cloud Build APIs                             | `serviceusage.services.enable`                     | `roles/serviceusage.serviceUsageAdmin`        |
-| Create the Docker repo                                       | `artifactregistry.repositories.create`             | `roles/artifactregistry.admin` (project-level) |
-| Grant the Compute SA `cloudbuild.builds.builder` (one-time)  | `resourcemanager.projects.setIamPolicy`            | `roles/resourcemanager.projectIamAdmin`       |
-
-- **Minimum**: `roles/artifactregistry.admin` + `roles/resourcemanager.projectIamAdmin` + `roles/serviceusage.serviceUsageAdmin`.
-- **Easy mode**: `roles/owner` on the project.
-
 ### Granting the roles
 
 ```bash
@@ -98,8 +94,6 @@ for ROLE in \
     roles/bigquery.jobUser \
     roles/datastore.owner \
     roles/pubsub.admin \
-    roles/artifactregistry.admin \
-    roles/resourcemanager.projectIamAdmin \
     roles/serviceusage.serviceUsageAdmin; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="$USER" --role="$ROLE"
@@ -304,58 +298,7 @@ skipped, IAM bindings are noop on repeat.
 
 ---
 
-## 5. Artifact Registry: Docker repo `agents`
-
-Every agent + MCP server container image lives here. Image references
-across this repo all look like:
-
-```
-${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/<image-name>:<tag>
-```
-
-where `AR_REPO` defaults to `agents`. You only need one Docker repo for
-the whole project — the orchestrator image, `gcp-log-analyzer`,
-`gcp-cloud-asset`, and any future agents all share it.
-
-### Option A — Console UI
-
-1. Open <https://console.cloud.google.com/artifacts>.
-2. Confirm the project picker shows `PROJECT_ID`.
-3. **+ Create repository**:
-   - **Name**: `agents`
-   - **Format**: Docker
-   - **Mode**: Standard
-   - **Location type**: Region → pick `REGION` (e.g. `us-central1`).
-   - **Encryption**: Google-managed (default).
-   - **Immutable image tags**: off (let `:latest` move).
-4. **Create**.
-5. (One-time, for `gcloud builds submit` to work) IAM & Admin → IAM →
-   find `<project-number>-compute@developer.gserviceaccount.com` →
-   **Edit principal** → **Add role** → `Cloud Build Service Account`
-   (`roles/cloudbuild.builds.builder`) → **Save**.
-
-### Option B — Cloud Shell
-
-```bash
-export REGION=us-central1     # match your cluster region
-./create_artifact_registry.sh
-```
-
-The script enables `artifactregistry.googleapis.com` and
-`cloudbuild.googleapis.com`, creates the `agents` repo in `$REGION`,
-and grants the Cloud Build SA the IAM role it needs to push to it.
-Idempotent.
-
-> **Why the Cloud Build IAM step?** In projects created after mid-2024,
-> Cloud Build runs as the Compute Engine default SA, which by default
-> can't push to AR (or read its own staging bucket, or write build
-> logs). One role — `roles/cloudbuild.builds.builder` — covers all of
-> it. Without this, your first `gcloud builds submit` fails with:
-> `<num>-compute@developer.gserviceaccount.com does not have storage.objects.get access`
-
----
-
-## 6. Verify
+## 5. Verify
 
 ```bash
 # BigQuery: tables exist
@@ -382,16 +325,9 @@ gcloud pubsub subscriptions get-iam-policy internal-auditor-triggers-sub \
   --project=$PROJECT_ID
 # expect: a binding listing GSA_EMAIL under roles/pubsub.subscriber
 
-# Artifact Registry: repo exists
-gcloud artifacts repositories describe agents \
+# Artifact Registry: your repo exists (sanity check; not created by this doc)
+gcloud artifacts repositories describe $AR_REPO \
   --project=$PROJECT_ID --location=$REGION
-
-# Artifact Registry: Cloud Build SA has builder role
-gcloud projects get-iam-policy $PROJECT_ID \
-  --flatten='bindings[].members[]' \
-  --filter='bindings.role=roles/cloudbuild.builds.builder' \
-  --format='value(bindings.members)'
-# expect: a service account ending in @developer.gserviceaccount.com
 ```
 
 ---
@@ -409,19 +345,18 @@ terraform init
 terraform apply -var "project_id=my-project"
 ```
 
-Pub/Sub (§4), Artifact Registry (§5), and the §3b Firestore collection
-seed are still manual either way — Terraform's `internal_auditor`
-module doesn't cover them today.
+Pub/Sub (§4) and the §3b Firestore collection seed are still manual
+either way — Terraform's `internal_auditor` module doesn't cover them
+today.
 
 ---
 
 ## File inventory
 
-| File                                                           | What it is                                            |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| [`create_bigquery.sql`](./create_bigquery.sql)                 | Pure DDL — paste into the BQ Console SQL editor.      |
-| [`create_bigquery.sh`](./create_bigquery.sh)                   | `bq` CLI wrapper that runs the DDL in Cloud Shell.    |
-| [`create_firestore.sh`](./create_firestore.sh)                 | gcloud script: DB + composite indexes + TTL.          |
-| [`create_pubsub.sh`](./create_pubsub.sh)                       | gcloud script: API enable, topic, subscription, GSA IAM binding (+ optional DLQ). |
-| [`create_artifact_registry.sh`](./create_artifact_registry.sh) | gcloud script: APIs enable, Docker repo, Cloud Build SA binding. |
-| `DEPLOY.md`                                                    | This document.                                        |
+| File                                           | What it is                                            |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| [`create_bigquery.sql`](./create_bigquery.sql) | Pure DDL — paste into the BQ Console SQL editor.      |
+| [`create_bigquery.sh`](./create_bigquery.sh)   | `bq` CLI wrapper that runs the DDL in Cloud Shell.    |
+| [`create_firestore.sh`](./create_firestore.sh) | gcloud script: DB + composite indexes + TTL.          |
+| [`create_pubsub.sh`](./create_pubsub.sh)       | gcloud script: API enable, topic, subscription, GSA IAM binding (+ optional DLQ). |
+| `DEPLOY.md`                                    | This document.                                        |

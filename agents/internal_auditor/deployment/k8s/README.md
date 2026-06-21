@@ -43,7 +43,7 @@ glue (RBAC for claims, Pub/Sub trigger plumbing).
 > - `PROJECT_ID` — GCP project hosting the GKE cluster + Pub/Sub topic.
 > - `REGION` — Artifact Registry / cluster region (e.g. `us-central1`).
 > - `CLUSTER` — your GKE cluster name.
-> - `AR_REPO` — Artifact Registry Docker repo (e.g. `agents`).
+> - `AR_REPO` — your existing Artifact Registry Docker repo name (e.g. `aaas-repo`).
 
 ---
 
@@ -55,9 +55,8 @@ glue (RBAC for claims, Pub/Sub trigger plumbing).
 - The CRDs `SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim` under
   `extensions.agents.x-k8s.io/v1beta1` should be present.
 - `kubectl` configured against the cluster.
-- Artifact Registry Docker repo exists (see
-  [`gcp_setup/DEPLOY.md` §5](../../gcp_setup/DEPLOY.md) or just run
-  [`gcp_setup/create_artifact_registry.sh`](../../gcp_setup/create_artifact_registry.sh)).
+- Artifact Registry Docker repo already exists in your project (we
+  don't create it here; ask your platform team if it doesn't).
 - **Both MCP server warm pools already deployed** per their DEPLOY.md.
 - Pub/Sub API enabled:
   `gcloud services enable pubsub.googleapis.com --project=$PROJECT_ID`

@@ -13,7 +13,7 @@
 # Agent Sandbox controller still serves v1alpha1, replace below.
 #
 # KSA: the matching ServiceAccount (annotated for Workload Identity) is
-# created by step 5 of mcp_servers/gcp_log_analyzer/DEPLOY.md.
+# created by step 4 of mcp_servers/gcp_log_analyzer/DEPLOY.md.
 apiVersion: extensions.agents.x-k8s.io/v1beta1
 kind: SandboxTemplate
 metadata:
