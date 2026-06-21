@@ -121,16 +121,21 @@ when it boots):
    immediately if the subscription doesn't exist when it boots, so this
    has to happen before step 4. Run [`gcp_setup/create_pubsub.sh`](gcp_setup/create_pubsub.sh)
    (covered in [`gcp_setup/DEPLOY.md` §4](gcp_setup/DEPLOY.md)).
-3. **Build + push** the orchestrator image to Artifact Registry
-   (MCP server images per their own DEPLOY.md). Step 4.
-4. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
-   Step 5.
-5. **Apply** the sandbox manifests (`sandbox-log-analyzer.yaml`,
+3. **Create the Artifact Registry Docker repo** (one-time, project-wide;
+   shared by every agent + MCP server image). Run
+   [`gcp_setup/create_artifact_registry.sh`](gcp_setup/create_artifact_registry.sh)
+   (covered in [`gcp_setup/DEPLOY.md` §5](gcp_setup/DEPLOY.md)).
+4. **Build + push** the orchestrator image to Artifact Registry
+   (MCP server images per their own DEPLOY.md). Deploy README step 4.
+5. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
+   Deploy README step 5.
+6. **Apply** the sandbox manifests (`sandbox-log-analyzer.yaml`,
    `sandbox-cloud-asset.yaml`) once the MCP servers are ready to run
    in warm pools. For an MCP-less smoke first, see "Profile A" in
    deploy README step 5.
-6. **Wire Cloud Scheduler** to publish to the topic on a cron. Step 7.
-7. **Ad-hoc audits:** `gcloud pubsub topics publish internal-auditor-triggers ...`.
+7. **Wire Cloud Scheduler** to publish to the topic on a cron. Deploy
+   README step 7.
+8. **Ad-hoc audits:** `gcloud pubsub topics publish internal-auditor-triggers ...`.
 
 ## Tests
 

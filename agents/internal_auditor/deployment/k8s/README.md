@@ -55,7 +55,9 @@ glue (RBAC for claims, Pub/Sub trigger plumbing).
 - The CRDs `SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim` under
   `extensions.agents.x-k8s.io/v1beta1` should be present.
 - `kubectl` configured against the cluster.
-- Artifact Registry Docker repo exists.
+- Artifact Registry Docker repo exists (see
+  [`gcp_setup/DEPLOY.md` §5](../../gcp_setup/DEPLOY.md) or just run
+  [`gcp_setup/create_artifact_registry.sh`](../../gcp_setup/create_artifact_registry.sh)).
 - **Both MCP server warm pools already deployed** per their DEPLOY.md.
 - Pub/Sub API enabled:
   `gcloud services enable pubsub.googleapis.com --project=$PROJECT_ID`

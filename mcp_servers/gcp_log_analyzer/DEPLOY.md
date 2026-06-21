@@ -39,25 +39,33 @@ export NAMESPACE=default              # where the warm pool lives
 
 ## 1. Enable required APIs (one-time, in HOST_PROJECT)
 
+GKE + per-server APIs the sandbox pods will need:
+
 ```bash
 gcloud services enable \
   container.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
   iamcredentials.googleapis.com \
   logging.googleapis.com \
   --project="$HOST_PROJECT"
 ```
 
-## 2. Create the Artifact Registry repo (one-time)
+(Artifact Registry + Cloud Build APIs are enabled by the AR setup in
+step 2.)
+
+## 2. Artifact Registry Docker repo (one-time, project-wide)
+
+The `$AR_REPO` Docker repo is shared across every agent and MCP server
+in this project — set up once with
+[`agents/internal_auditor/gcp_setup/create_artifact_registry.sh`](../../agents/internal_auditor/gcp_setup/create_artifact_registry.sh).
+See [`gcp_setup/DEPLOY.md` §5](../../agents/internal_auditor/gcp_setup/DEPLOY.md) for the Console alternative.
 
 ```bash
-gcloud artifacts repositories create "$AR_REPO" \
-  --project="$HOST_PROJECT" \
-  --repository-format=docker \
-  --location="$REGION" \
-  --description="Container images for the internal-auditor agent stack"
+export PROJECT_ID="$HOST_PROJECT"      # the script's required var
+agents/internal_auditor/gcp_setup/create_artifact_registry.sh
 ```
+
+Skip this if you've already run it for another image in the same
+project — the repo is project-wide.
 
 ## 3. Build + push the image
 
@@ -72,16 +80,6 @@ gcloud builds submit mcp_servers/gcp_log_analyzer \
 Cloud Build picks up the `Dockerfile` in `mcp_servers/gcp_log_analyzer/`,
 builds the image, and pushes to AR. The image's `ENTRYPOINT` runs the
 server with `MCP_TRANSPORT=streamable-http` listening on `:8080`.
-
-> **One-time Cloud Build IAM gotcha:** in projects created after
-> mid-2024, Cloud Build runs as the Compute Engine default SA, which
-> needs `roles/cloudbuild.builds.builder`:
-> ```bash
-> PROJECT_NUMBER=$(gcloud projects describe "$HOST_PROJECT" --format='value(projectNumber)')
-> gcloud projects add-iam-policy-binding "$HOST_PROJECT" \
->   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
->   --role="roles/cloudbuild.builds.builder"
-> ```
 
 ## 4. Create the GSA and grant read access to logs
 
