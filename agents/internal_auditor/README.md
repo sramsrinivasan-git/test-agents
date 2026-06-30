@@ -40,11 +40,14 @@ src/internal_auditor/
 
 tests/test_smoke.py          import + shape tests (no cluster, no Gemini)
 Dockerfile + .dockerignore   container image (CMD: internal-auditor-subscriber)
-deployment/k8s/              GKE manifests: orchestrator Deployment, warm pools,
-                             RBAC for sandbox claims, walkthrough README
-gcp_setup/                   one-time BQ + Firestore setup (used later)
+gcp_setup/                   one-time GCP setup scripts (Pub/Sub now; BQ + Firestore later)
 deployment/terraform/        TF for BQ + Firestore (used later)
 ```
+
+The orchestrator's GKE deployment (Deployment, ServiceAccount + Workload
+Identity, and the cross-namespace SandboxClaim RBAC) is provisioned by a
+separate Terraform module owned by the platform team — this repo does
+not ship those manifests.
 
 The claim lifecycle, the ADK run loop, the Pub/Sub subscriber loop, the
 liveness heartbeat, and the `SANDBOX_*` / `MCP_SERVER_PORT` knobs all
@@ -110,31 +113,32 @@ publishes — the workflow is the same either way.)
 
 ## Deploy to GKE
 
-See [`deployment/k8s/README.md`](deployment/k8s/README.md) for the
-full walkthrough. Quick summary of what has to happen, in order
-(the order matters — the pod crash-loops if Pub/Sub doesn't exist
-when it boots):
+The orchestrator's GKE workload — Deployment, ServiceAccount + Workload
+Identity, and the cross-namespace SandboxClaim RBAC — is provisioned by
+a **separate Terraform module owned by the platform team**, not by this
+repo. The orchestrator runs in the `default` namespace and claims from
+the warm pools in `agent-sandbox`.
 
-1. **Create the orchestrator GSA** and grant it `roles/aiplatform.user`
-   (Gemini). Bind it to the K8s SA via Workload Identity. Deploy README
-   step 3.
-2. **Create the Pub/Sub topic + subscription** and grant the GSA
-   `roles/pubsub.subscriber` on it. The pod's subscriber call fails
-   immediately if the subscription doesn't exist when it boots, so this
-   has to happen before step 4. Run [`gcp_setup/create_pubsub.sh`](gcp_setup/create_pubsub.sh)
-   (covered in [`gcp_setup/DEPLOY.md` §4](gcp_setup/DEPLOY.md)).
-3. **Build + push** the orchestrator image to your existing Artifact
-   Registry repo (MCP server images per their own DEPLOY.md). Deploy
-   README step 4. AR repo itself is assumed to exist already.
-4. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`
-   (orchestrator runs in `default`; `rbac.yaml` grants it claim rights
-   in the `agent-sandbox` namespace where the warm pools live). Deploy
-   README step 5. For a no-claim smoke first, see "Profile A" there.
-   The MCP servers + their warm pools are deployed/owned separately —
-   not by this repo.
-5. **Wire Cloud Scheduler** to publish to the topic on a cron. Deploy
-   README step 7.
-6. **Ad-hoc audits:** `gcloud pubsub topics publish internal-auditor-triggers ...`.
+What this repo is responsible for, before/around that Terraform deploy:
+
+1. **GCP setup (one-time):** the orchestrator GSA + its roles
+   (`roles/aiplatform.user` for Gemini, `roles/pubsub.subscriber` on the
+   trigger subscription), and the Pub/Sub topic + subscription. The pod
+   crash-loops if the subscription doesn't exist when it boots, so create
+   it first. See [`gcp_setup/DEPLOY.md`](gcp_setup/DEPLOY.md) /
+   [`gcp_setup/create_pubsub.sh`](gcp_setup/create_pubsub.sh).
+2. **Build + push** the orchestrator image to your Artifact Registry repo
+   (the Terraform deploy references this image).
+3. **Runtime config** the Terraform must set on the pod: `SANDBOX_MODE=cluster`,
+   `SANDBOX_NAMESPACE=agent-sandbox`, the two `GCP_*_WARMPOOL` names, the
+   `PUBSUB_*` vars, and the Vertex AI envs. These match the defaults in
+   `config.py` / `common.config`; share them with whoever owns the module.
+4. **Triggers:** wire Cloud Scheduler to publish to the topic on a cron,
+   and/or publish ad-hoc with
+   `gcloud pubsub topics publish internal-auditor-triggers ...`.
+
+(MCP servers + their warm pools are deployed/owned separately too — not
+by this repo.)
 
 ## Tests
 

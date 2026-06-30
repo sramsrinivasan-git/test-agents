@@ -26,8 +26,9 @@ GOOGLE_CLOUD_PROJECT: str | None = os.environ.get("GOOGLE_CLOUD_PROJECT")
 
 APP_NAME = "internal_auditor"
 
-# Warm pool names per MCP server type. Must match the SandboxWarmPool
-# resources in deployment/k8s/sandbox-*.yaml.
+# Warm pool names per MCP server type. Must match the names of the
+# SandboxWarmPool resources the MCP servers are deployed under (in the
+# `agent-sandbox` namespace; deployed + owned separately from this repo).
 GCP_LOG_ANALYZER_WARMPOOL: str = os.environ.get(
     "GCP_LOG_ANALYZER_WARMPOOL", "gcp-log-analyzer-warmpool-mcp"
 )

@@ -28,8 +28,10 @@ Cloud Shell script. Pick whichever fits your context.
 > - `FIRESTORE_REGION` = Firestore location, e.g. `nam5` (US multi-region),
 >   `eur3` (EU multi-region), or a single region like `us-central1`.
 > - `GSA_EMAIL` = the orchestrator's Google Service Account email, e.g.
->   `internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com` (created
->   in [`../deployment/k8s/README.md`](../deployment/k8s/README.md) step 3).
+>   `internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com`. The GSA +
+>   its Workload Identity binding are provisioned by the platform team's
+>   Terraform; create_pubsub.sh just needs the email to grant it
+>   `roles/pubsub.subscriber`.
 
 ---
 
@@ -253,8 +255,8 @@ the auditor has written real docs in the meantime.
 The orchestrator pod runs a Pub/Sub subscriber as its main process; it
 opens a streaming pull on the subscription as its first action. **If
 the subscription doesn't exist when the pod boots, it crash-loops on
-`NotFound`.** Do this before applying
-[`../deployment/k8s/deployment.yaml`](../deployment/k8s/deployment.yaml).
+`NotFound`.** Run this before the platform team's Terraform deploys the
+orchestrator workload.
 
 Default names (override via env if you must — see the script header):
 
