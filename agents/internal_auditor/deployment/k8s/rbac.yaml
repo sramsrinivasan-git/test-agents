@@ -1,25 +1,30 @@
 # RBAC for the orchestrator pod to claim sandboxes at run time.
 #
-# Grants the `internal-auditor` ServiceAccount permission to
-# create / get / watch / delete SandboxClaim resources in the same
-# namespace as the warm pools. Also needs read access to the bound
-# Sandbox object so the Python client can resolve podIPs.
+# Topology:
+#   - orchestrator pod + its KSA `internal-auditor`  -> namespace `default`
+#   - warm pools + SandboxClaim + Sandbox resources  -> namespace `agent-sandbox`
 #
-# Namespaces here assume the warm pools live in `default` (matching
-# sandbox-log-analyzer.yaml / sandbox-cloud-asset.yaml). If you move
-# them, adjust the Role's namespace AND switch this to a ClusterRole +
-# RoleBinding pair so the agent can claim across namespaces.
+# This is the cross-namespace case. A RoleBinding's roleRef must point at
+# a Role in the SAME namespace as the RoleBinding, but its `subjects` may
+# reference a ServiceAccount in ANOTHER namespace. So both the Role and
+# the RoleBinding live in `agent-sandbox` (where the claims are created),
+# and the subject is the orchestrator's SA over in `default`.
+#
+# Grants: create/get/list/watch/delete on SandboxClaim (the orchestrator
+# creates a claim per tool call and deletes it on completion), plus
+# read-only on the bound Sandbox so the Python client can resolve
+# status.sandbox.podIPs[].
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: sandbox-claimer
-  namespace: default
+  namespace: agent-sandbox
 rules:
   - apiGroups: ["extensions.agents.x-k8s.io"]
     resources: ["sandboxclaims"]
     verbs: ["create", "get", "list", "watch", "delete"]
   # Read-only on the bound Sandbox so the Python client can resolve
-  # status.podIPs[] after the claim becomes Ready.
+  # status.sandbox.podIPs[] after the claim becomes Ready.
   - apiGroups: ["agents.x-k8s.io"]
     resources: ["sandboxes"]
     verbs: ["get", "list", "watch"]
@@ -28,11 +33,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: internal-auditor-can-claim-sandboxes
-  namespace: default
+  namespace: agent-sandbox
 subjects:
   - kind: ServiceAccount
     name: internal-auditor
-    namespace: agents
+    namespace: default
 roleRef:
   kind: Role
   name: sandbox-claimer

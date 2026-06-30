@@ -29,10 +29,10 @@ APP_NAME = "internal_auditor"
 # Warm pool names per MCP server type. Must match the SandboxWarmPool
 # resources in deployment/k8s/sandbox-*.yaml.
 GCP_LOG_ANALYZER_WARMPOOL: str = os.environ.get(
-    "GCP_LOG_ANALYZER_WARMPOOL", "gcp-log-analyzer-warmpool"
+    "GCP_LOG_ANALYZER_WARMPOOL", "gcp-log-analyzer-warmpool-mcp"
 )
 GCP_CLOUD_ASSET_WARMPOOL: str = os.environ.get(
-    "GCP_CLOUD_ASSET_WARMPOOL", "gcp-cloud-asset-warmpool"
+    "GCP_CLOUD_ASSET_WARMPOOL", "gcp-cloud-asset-warmpool-mcp"
 )
 
 # Local-mode fallback URLs. Only read when SANDBOX_MODE=local (see

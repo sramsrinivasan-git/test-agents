@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: internal-auditor
-  namespace: agents
+  namespace: default
   labels:
     app: internal-auditor
 spec:
@@ -37,12 +37,16 @@ spec:
             # rbac.yaml for the SandboxClaim permissions this needs.
             - name: SANDBOX_MODE
               value: "cluster"
+            # The warm pools + SandboxClaim resources live in the
+            # `agent-sandbox` namespace (the orchestrator pod itself runs
+            # in `default`). rbac.yaml grants this pod's SA claim rights
+            # in agent-sandbox via a cross-namespace RoleBinding.
             - name: SANDBOX_NAMESPACE
-              value: "default"
+              value: "agent-sandbox"
             - name: GCP_LOG_ANALYZER_WARMPOOL
-              value: "gcp-log-analyzer-warmpool"
+              value: "gcp-log-analyzer-warmpool-mcp"
             - name: GCP_CLOUD_ASSET_WARMPOOL
-              value: "gcp-cloud-asset-warmpool"
+              value: "gcp-cloud-asset-warmpool-mcp"
             - name: MCP_SERVER_PORT
               value: "8080"
             - name: GOOGLE_CLOUD_PROJECT

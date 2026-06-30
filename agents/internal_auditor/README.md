@@ -126,15 +126,15 @@ when it boots):
 3. **Build + push** the orchestrator image to your existing Artifact
    Registry repo (MCP server images per their own DEPLOY.md). Deploy
    README step 4. AR repo itself is assumed to exist already.
-4. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`.
-   Deploy README step 5.
-5. **Apply** the sandbox manifests (`sandbox-log-analyzer.yaml`,
-   `sandbox-cloud-asset.yaml`) once the MCP servers are ready to run
-   in warm pools. For an MCP-less smoke first, see "Profile A" in
-   deploy README step 5.
-6. **Wire Cloud Scheduler** to publish to the topic on a cron. Deploy
+4. **Apply** `serviceaccount.yaml`, `deployment.yaml`, and `rbac.yaml`
+   (orchestrator runs in `default`; `rbac.yaml` grants it claim rights
+   in the `agent-sandbox` namespace where the warm pools live). Deploy
+   README step 5. For a no-claim smoke first, see "Profile A" there.
+   The MCP servers + their warm pools are deployed/owned separately —
+   not by this repo.
+5. **Wire Cloud Scheduler** to publish to the topic on a cron. Deploy
    README step 7.
-7. **Ad-hoc audits:** `gcloud pubsub topics publish internal-auditor-triggers ...`.
+6. **Ad-hoc audits:** `gcloud pubsub topics publish internal-auditor-triggers ...`.
 
 ## Tests
 

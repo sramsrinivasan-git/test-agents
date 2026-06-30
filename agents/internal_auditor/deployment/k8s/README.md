@@ -18,26 +18,23 @@ Topology in the cluster:
                    └─────────────────┬────────────────────┘
                                      │ subscription
                                      ▼
-agents namespace
+default namespace
 └── Deployment: internal-auditor (Pub/Sub subscriber; long-running)
-        │
-        │ claims one sandbox per specialist tool call
+        │   KSA: internal-auditor
+        │ claims one sandbox per specialist tool call (in agent-sandbox ns)
         ▼
-default namespace (or wherever the warm pools live)
-├── SandboxWarmPool gcp-log-analyzer-warmpool  (2 idle pods)
-└── SandboxWarmPool gcp-cloud-asset-warmpool   (2 idle pods)
+agent-sandbox namespace   (deployed + owned separately; NOT by this guide)
+├── SandboxWarmPool gcp-log-analyzer-warmpool-mcp
+└── SandboxWarmPool gcp-cloud-asset-warmpool-mcp
 
 Result lands in Cloud Logging: jsonPayload.run_id == "audit-..."
 ```
 
-The MCP server warm pools have their own per-server deploy guides
-(image build, GSA, Workload Identity binding, per-server IAM grants):
-
-- [`mcp_servers/gcp_log_analyzer/DEPLOY.md`](../../../../mcp_servers/gcp_log_analyzer/DEPLOY.md)
-- [`mcp_servers/gcp_cloud_asset/DEPLOY.md`](../../../../mcp_servers/gcp_cloud_asset/DEPLOY.md)
-
-**This** guide only covers the orchestrator itself + the cluster-side
-glue (RBAC for claims, Pub/Sub trigger plumbing).
+The MCP servers and their warm pools are deployed and owned separately
+(out of scope for this guide). This guide only covers the orchestrator
+itself + the cluster-side glue: the orchestrator's ServiceAccount, its
+Deployment, the cross-namespace RBAC that lets it create SandboxClaims
+in `agent-sandbox`, and the Pub/Sub trigger plumbing.
 
 > Substitute throughout:
 > - `PROJECT_ID` — GCP project hosting the GKE cluster + Pub/Sub topic.
@@ -57,7 +54,10 @@ glue (RBAC for claims, Pub/Sub trigger plumbing).
 - `kubectl` configured against the cluster.
 - Artifact Registry Docker repo already exists in your project (we
   don't create it here; ask your platform team if it doesn't).
-- **Both MCP server warm pools already deployed** per their DEPLOY.md.
+- **Both MCP server warm pools already deployed** in the `agent-sandbox`
+  namespace, named `gcp-log-analyzer-warmpool-mcp` and
+  `gcp-cloud-asset-warmpool-mcp`. Confirm with
+  `kubectl -n agent-sandbox get sandboxwarmpools`.
 - Pub/Sub API enabled:
   `gcloud services enable pubsub.googleapis.com --project=$PROJECT_ID`
 
@@ -104,12 +104,13 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
 # (Pub/Sub subscriber on the trigger subscription is granted by step 2's
 #  create_pubsub.sh; not repeated here.)
 
-# Workload Identity binding: K8s SA in `agents` impersonates the GSA.
+# Workload Identity binding: K8s SA `internal-auditor` in the `default`
+# namespace impersonates the GSA.
 gcloud iam service-accounts add-iam-policy-binding \
   "internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com" \
   --project="$PROJECT_ID" \
   --role="roles/iam.workloadIdentityUser" \
-  --member="serviceAccount:${PROJECT_ID}.svc.id.goog[agents/internal-auditor]"
+  --member="serviceAccount:${PROJECT_ID}.svc.id.goog[default/internal-auditor]"
 
 sed -i.bak "s/PROJECT_ID/$PROJECT_ID/g" \
   agents/internal_auditor/deployment/k8s/serviceaccount.yaml
@@ -127,19 +128,23 @@ sed -i.bak "s|REPLACE_WITH_ARTIFACT_REGISTRY_IMAGE|$ORCHESTRATOR_IMAGE|" \
 
 ## 5. Apply orchestrator manifests
 
-```bash
-kubectl create namespace agents 2>/dev/null || true
+The orchestrator runs in the `default` namespace; the cross-namespace
+`rbac.yaml` (Role + RoleBinding in `agent-sandbox`) lets its SA create
+SandboxClaims where the warm pools live.
 
-# ConfigMap the Deployment reads GOOGLE_CLOUD_PROJECT from.
-kubectl -n agents create configmap gcp-config \
+```bash
+# ConfigMap the Deployment reads GOOGLE_CLOUD_PROJECT from (same ns as the pod).
+kubectl -n default create configmap gcp-config \
   --from-literal=project_id="$PROJECT_ID" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl apply -f agents/internal_auditor/deployment/k8s/serviceaccount.yaml
 kubectl apply -f agents/internal_auditor/deployment/k8s/deployment.yaml
 
-# RBAC: lets the orchestrator's K8s SA claim/get/delete SandboxClaim
-# resources in the namespace the warm pools live in.
+# RBAC: lets the orchestrator's SA (default/internal-auditor) create,
+# get, and delete SandboxClaim resources in the agent-sandbox namespace.
+# Requires you can create RBAC in agent-sandbox (cluster-admin or an
+# equivalent grant in that namespace).
 kubectl apply -f agents/internal_auditor/deployment/k8s/rbac.yaml
 ```
 
@@ -147,16 +152,15 @@ No `service.yaml` — the orchestrator has no HTTP surface.
 
 ---
 
-### Profile A — smoke test without the MCP warm pools
+### Profile A — smoke test without claiming warm pools
 
-If you want to validate the GKE + Pub/Sub plumbing **before** the MCP
-servers are migrated to warm pools (e.g. they still live on Cloud Run,
-or you just want a fast smoke test), deploy the orchestrator in
-`SANDBOX_MODE=local` pointing at deliberately unreachable URLs. The
-specialists will fail their MCP calls fast, the orchestrator wraps
-each failure in its `findings` slot (per its instruction) and the
-audit completes normally. Every layer this repo builds is exercised
-except the MCP calls themselves.
+To validate the GKE + Pub/Sub plumbing without exercising the
+SandboxClaim path (fast first smoke, or to isolate a problem to the
+claim layer), deploy the orchestrator in `SANDBOX_MODE=local` pointing
+at deliberately unreachable URLs. The specialists fail their MCP calls
+fast, the orchestrator wraps each failure in its `findings` slot (per
+its instruction) and the audit completes normally. Every layer this
+repo builds is exercised except the claim + MCP calls themselves.
 
 Patch the env block in `deployment.yaml` for this profile:
 
@@ -188,10 +192,10 @@ gcloud pubsub topics publish internal-auditor-triggers \
 Watch the orchestrator pull it and run:
 
 ```bash
-kubectl -n agents logs deployment/internal-auditor -f
+kubectl -n default logs deployment/internal-auditor -f
 
 # In another shell, watch claims fly while the audit runs (cluster-mode only):
-kubectl -n default get sandboxclaims -w
+kubectl -n agent-sandbox get sandboxclaims -w
 ```
 
 The result is logged as a single structured line; pull it from Cloud Logging:
@@ -199,7 +203,7 @@ The result is logged as a single structured line; pull it from Cloud Logging:
 ```bash
 gcloud logging read \
   'resource.type=k8s_container
-   AND resource.labels.namespace_name=agents
+   AND resource.labels.namespace_name=default
    AND resource.labels.container_name=internal-auditor
    AND jsonPayload.run_id:"audit-"' \
   --project="$PROJECT_ID" \
@@ -224,9 +228,9 @@ the orchestrator handles for ad-hoc audits.
 
 ```bash
 gcloud builds submit agents/internal_auditor --tag "${ORCHESTRATOR_IMAGE%:*}:0.1.1"
-kubectl -n agents set image deployment/internal-auditor \
+kubectl -n default set image deployment/internal-auditor \
   internal-auditor="${ORCHESTRATOR_IMAGE%:*}:0.1.1"
-kubectl -n agents rollout status deployment/internal-auditor
+kubectl -n default rollout status deployment/internal-auditor
 ```
 
 MCP server updates: see their respective DEPLOY.md files.
@@ -248,6 +252,12 @@ MCP server updates: see their respective DEPLOY.md files.
 - **MCP auth** — orchestrator → MCP-server-pod traffic is unauthenticated
   today (in-cluster pod IP, no mTLS). Before production, run both inside
   a service mesh so the connections are mTLS-encrypted.
-- **API version** — manifests use `extensions.agents.x-k8s.io/v1beta1`.
-  Change in `sandbox-*.yaml` + `rbac.yaml` if your controller still
-  serves `v1alpha1`.
+- **API version** — `rbac.yaml` grants on `extensions.agents.x-k8s.io`
+  (sandboxclaims) and `agents.x-k8s.io` (sandboxes). If your installed
+  controller serves a different version/group, adjust the `apiGroups`
+  there and `SANDBOX_*` wiring accordingly.
+- **Namespaces** — orchestrator + its SA live in `default`; warm pools,
+  SandboxClaims, and the claim RBAC live in `agent-sandbox`. If either
+  moves, update `deployment.yaml` (`SANDBOX_NAMESPACE`, the Deployment
+  namespace), `rbac.yaml` (both objects' namespace + the subject), and
+  the Workload Identity member in step 3.
