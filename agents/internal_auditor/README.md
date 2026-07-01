@@ -15,6 +15,9 @@ releases it. The orchestrator itself runs as a long-running pod that
 **subscribes to a Pub/Sub topic** for audit triggers; results land in
 Cloud Logging keyed by `run_id`.
 
+New here? [`ARCHITECTURE.md`](ARCHITECTURE.md) explains how everything
+connects in plain language (with diagrams and an audit-firm analogy).
+
 Not yet implemented (see `src/agent.py` header for the list):
 Agent Behavior Evaluator, Policy Evaluator, Alert Dispatcher,
 BigQuery/Firestore writes, ReAct scratchpad/replan.
