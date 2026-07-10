@@ -11,9 +11,10 @@ Implements three of the agents from [`plan.md`](../../plan.md):
 
 Each specialist tool call **claims a fresh sandboxed MCP server pod**
 from a GKE Agent Sandbox warm pool, uses it for that single call, and
-releases it. The orchestrator itself runs as a long-running pod that
-**subscribes to a Pub/Sub topic** for audit triggers; results land in
-Cloud Logging keyed by `run_id`.
+releases it. The orchestrator itself runs as a long-running **FastAPI
+service** (`POST /audit`) — triggered by Cloud Scheduler on a cron and
+by ad-hoc / agent callers — and returns the merged audit JSON in the
+HTTP response.
 
 New here? [`ARCHITECTURE.md`](ARCHITECTURE.md) explains how everything
 connects in plain language (with diagrams and an audit-firm analogy).
@@ -28,9 +29,8 @@ Built on **Google ADK** with **Gemini 3 Flash**. Designed to run on
 ## Layout
 
 Shared, agent-agnostic runtime lives in the top-level `common/` package
-(`common.sandbox`, `common.runner`, `common.pubsub`, `common.heartbeat`,
-`common.ids`, `common.config`). This package holds only the audit-
-specific pieces:
+(`common.sandbox`, `common.runner`, `common.serving`, `common.config`).
+This package holds only the audit-specific pieces:
 
 ```
 src/internal_auditor/
@@ -39,27 +39,27 @@ src/internal_auditor/
 ├── asset_inspector.py  asset inspector specialist (same shape)
 ├── schemas.py          output JSON shapes (single source of truth)
 ├── config.py           audit-specific config (model, warm pools, project)
-└── subscriber.py       Pub/Sub entrypoint: pull trigger → run root_agent → log result
+└── server.py           FastAPI entry: POST /audit → run root_agent → return JSON
 
 tests/test_smoke.py          import + shape tests (no cluster, no Gemini)
-Dockerfile + .dockerignore   container image (CMD: internal-auditor-subscriber)
-gcp_setup/                   one-time GCP setup scripts (Pub/Sub now; BQ + Firestore later)
+Dockerfile + .dockerignore   container image (CMD: internal-auditor-server)
+gcp_setup/                   one-time GCP setup (BQ + Firestore; used by future Policy Agent)
 deployment/terraform/        TF for BQ + Firestore (used later)
 ```
 
 The orchestrator's GKE deployment (Deployment, ServiceAccount + Workload
-Identity, and the cross-namespace SandboxClaim RBAC) is provisioned by a
-separate Terraform module owned by the platform team — this repo does
-not ship those manifests.
+Identity, the ClusterIP Service, and the cross-namespace SandboxClaim
+RBAC) is provisioned by a separate Terraform module owned by the platform
+team — this repo does not ship those manifests.
 
-The claim lifecycle, the ADK run loop, the Pub/Sub subscriber loop, the
-liveness heartbeat, and the `SANDBOX_*` / `MCP_SERVER_PORT` knobs all
-come from `common/` and are reused by every agent.
+The claim lifecycle, the ADK run loop, the FastAPI app + `/healthz`, and
+the `SANDBOX_*` / `MCP_SERVER_PORT` knobs all come from `common/` and are
+reused by every agent.
 
 ## Run locally with `adk web`
 
 For interactive development, `adk web` imports `root_agent` directly and
-bypasses Pub/Sub entirely - the subscriber is a production-only entry
+bypasses the FastAPI server entirely - `server.py` is a production entry
 point. `SANDBOX_MODE=local` skips the cluster claim path and points each
 specialist at a static MCP server URL.
 
@@ -92,8 +92,8 @@ export GCP_CLOUD_ASSET_MCP_URL=http://localhost:1/mcp
 running in a cluster (skip claim semantics).
 
 ```bash
-kubectl -n default port-forward pod/<a-warmpool-pod> 18080:8080 &     # gcp-log-analyzer
-kubectl -n default port-forward pod/<another-warmpool-pod> 18081:8080 &  # gcp-cloud-asset
+kubectl -n agent-sandbox port-forward pod/<a-warmpool-pod> 18080:8080 &     # gcp-log-analyzer
+kubectl -n agent-sandbox port-forward pod/<another-warmpool-pod> 18081:8080 &  # gcp-cloud-asset
 export GCP_LOG_ANALYZER_MCP_URL=http://localhost:18080/mcp
 export GCP_CLOUD_ASSET_MCP_URL=http://localhost:18081/mcp
 ```
@@ -111,34 +111,41 @@ send a message like:
 
 You'll see the orchestrator fan out to `log_analyzer` + `asset_inspector`
 in parallel and return the merged JSON. (`trigger_type` is `scheduled`
-when a Cloud Scheduler cron publishes the trigger, `on_demand` for ad-hoc
-publishes — the workflow is the same either way.)
+when a Cloud Scheduler cron fires `POST /audit`, `on_demand` for ad-hoc
+callers — the workflow is the same either way.)
 
 ## Deploy to GKE
 
 The orchestrator's GKE workload — Deployment, ServiceAccount + Workload
-Identity, and the cross-namespace SandboxClaim RBAC — is provisioned by
-a **separate Terraform module owned by the platform team**, not by this
-repo. The orchestrator runs in the `default` namespace and claims from
-the warm pools in `agent-sandbox`.
+Identity, the **ClusterIP Service**, and the cross-namespace SandboxClaim
+RBAC — is provisioned by a **separate Terraform module owned by the
+platform team**, not by this repo. The orchestrator runs in the `default`
+namespace and claims from the warm pools in `agent-sandbox`.
 
 What this repo is responsible for, before/around that Terraform deploy:
 
-1. **GCP setup (one-time):** the orchestrator GSA + its roles
-   (`roles/aiplatform.user` for Gemini, `roles/pubsub.subscriber` on the
-   trigger subscription), and the Pub/Sub topic + subscription. The pod
-   crash-loops if the subscription doesn't exist when it boots, so create
-   it first. See [`gcp_setup/DEPLOY.md`](gcp_setup/DEPLOY.md) /
-   [`gcp_setup/create_pubsub.sh`](gcp_setup/create_pubsub.sh).
+1. **GCP setup (one-time):** the orchestrator GSA + `roles/aiplatform.user`
+   (Gemini), plus BQ/Firestore for the future Policy Agent. See
+   [`gcp_setup/DEPLOY.md`](gcp_setup/DEPLOY.md). No Pub/Sub — triggering
+   is HTTP.
 2. **Build + push** the orchestrator image to your Artifact Registry repo
    (the Terraform deploy references this image).
 3. **Runtime config** the Terraform must set on the pod: `SANDBOX_MODE=cluster`,
-   `SANDBOX_NAMESPACE=agent-sandbox`, the two `GCP_*_WARMPOOL` names, the
-   `PUBSUB_*` vars, and the Vertex AI envs. These match the defaults in
-   `config.py` / `common.config`; share them with whoever owns the module.
-4. **Triggers:** wire Cloud Scheduler to publish to the topic on a cron,
-   and/or publish ad-hoc with
-   `gcloud pubsub topics publish internal-auditor-triggers ...`.
+   `SANDBOX_NAMESPACE=agent-sandbox`, the two `GCP_*_WARMPOOL` names, and
+   the Vertex AI envs (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`,
+   `GOOGLE_GENAI_USE_VERTEXAI`). These match the defaults in `config.py` /
+   `common.config`; share them with whoever owns the module. The pod
+   listens on `:8080` (`/healthz` for the probe, `/audit` for triggers) —
+   expose it as a **ClusterIP** Service (in-cluster only; no external LB
+   in the request path, so no LB timeout).
+4. **Triggers:** point **Cloud Scheduler** at the Service with an HTTP
+   target hitting `POST /audit` on a cron; ad-hoc / other agents call the
+   same endpoint in-cluster:
+   ```bash
+   curl -sS -X POST http://internal-auditor.default.svc.cluster.local:8080/audit \
+     -H 'Content-Type: application/json' \
+     -d '{"trigger_type":"on_demand","lookback_hours":1.0}'
+   ```
 
 (MCP servers + their warm pools are deployed/owned separately too — not
 by this repo.)

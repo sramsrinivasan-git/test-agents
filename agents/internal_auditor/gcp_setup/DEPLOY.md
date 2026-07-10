@@ -2,12 +2,15 @@
 
 How to create the GCP resources the Internal Auditor needs:
 
-- **Pub/Sub** topic + subscription that the orchestrator subscribes to
-  for audit triggers (§4).
 - **BigQuery** dataset + tables that hold audit runs / findings / alerts
   (§1–§2). Used by the future Policy Agent.
 - **Firestore** database + indexes + TTL for ground-truth precedents
   (§3). Used by the future Policy Agent.
+
+> The orchestrator is triggered over **HTTP** (`POST /audit`) — by Cloud
+> Scheduler on a cron and by ad-hoc / agent callers — so there is no
+> Pub/Sub topic to create for triggering. Both stores below are used by
+> the *future* Policy Agent, not the orchestrator as it stands today.
 
 > **Artifact Registry is assumed to already exist** in your project as
 > a Docker repo. Image refs in this repo look like
@@ -27,11 +30,6 @@ Cloud Shell script. Pick whichever fits your context.
 > - `BQ_LOCATION` = BigQuery dataset region, e.g. `US`, `EU`, `us-central1`.
 > - `FIRESTORE_REGION` = Firestore location, e.g. `nam5` (US multi-region),
 >   `eur3` (EU multi-region), or a single region like `us-central1`.
-> - `GSA_EMAIL` = the orchestrator's Google Service Account email, e.g.
->   `internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com`. The GSA +
->   its Workload Identity binding are provisioned by the platform team's
->   Terraform; create_pubsub.sh just needs the email to grant it
->   `roles/pubsub.subscriber`.
 
 ---
 
@@ -75,17 +73,6 @@ role if you don't care about least-privilege for one-off setup.
 
 Already covered by `roles/datastore.owner` above.
 
-### Pub/Sub (§4)
-
-| Action                                          | Permission                            | Minimum role                          |
-| ----------------------------------------------- | ------------------------------------- | ------------------------------------- |
-| Enable the Pub/Sub API                          | `serviceusage.services.enable`        | `roles/serviceusage.serviceUsageAdmin` |
-| Create topic + subscription                     | `pubsub.topics.create`, `pubsub.subscriptions.create` | `roles/pubsub.editor` (project-level) |
-| Grant the orchestrator GSA `pubsub.subscriber`  | `pubsub.subscriptions.setIamPolicy`   | `roles/pubsub.admin` on the subscription (or project-level) |
-
-- **Minimum**: `roles/pubsub.admin` + `roles/serviceusage.serviceUsageAdmin`.
-- **Easy mode**: `roles/owner` on the project.
-
 ### Granting the roles
 
 ```bash
@@ -95,7 +82,6 @@ for ROLE in \
     roles/bigquery.dataOwner \
     roles/bigquery.jobUser \
     roles/datastore.owner \
-    roles/pubsub.admin \
     roles/serviceusage.serviceUsageAdmin; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="$USER" --role="$ROLE"
@@ -250,57 +236,7 @@ the auditor has written real docs in the meantime.
 
 ---
 
-## 4. Pub/Sub: trigger topic + subscription
-
-The orchestrator pod runs a Pub/Sub subscriber as its main process; it
-opens a streaming pull on the subscription as its first action. **If
-the subscription doesn't exist when the pod boots, it crash-loops on
-`NotFound`.** Run this before the platform team's Terraform deploys the
-orchestrator workload.
-
-Default names (override via env if you must — see the script header):
-
-| Resource           | Name                                 |
-| ------------------ | ------------------------------------ |
-| Trigger topic      | `internal-auditor-triggers`          |
-| Pull subscription  | `internal-auditor-triggers-sub`      |
-| DLQ topic (opt)    | `internal-auditor-triggers-dlq`      |
-
-### Option A — Console UI
-
-1. Open <https://console.cloud.google.com/cloudpubsub/topic/list>.
-2. **Create topic** → ID `internal-auditor-triggers`, leave defaults,
-   **Create**.
-3. Open the topic → **Subscriptions** tab → **Create subscription**:
-   - **ID**: `internal-auditor-triggers-sub`
-   - **Delivery type**: Pull
-   - **Acknowledgement deadline**: 600 seconds (10 minutes) — give an
-     audit room to finish before Pub/Sub redelivers.
-   - **Message retention duration**: 1 day.
-   - **Expiration period**: Never.
-   - (Optional) **Dead-lettering**: enable, point at a topic you create
-     first named `internal-auditor-triggers-dlq`, max delivery
-     attempts 5.
-4. On the new subscription, **Permissions** tab → **Add principal** →
-   paste the orchestrator GSA (`GSA_EMAIL`) → role
-   `Pub/Sub Subscriber` → **Save**.
-
-### Option B — Cloud Shell
-
-```bash
-export GSA_EMAIL="internal-auditor@${PROJECT_ID}.iam.gserviceaccount.com"
-./create_pubsub.sh
-
-# With DLQ:
-CREATE_DLQ=1 ./create_pubsub.sh
-```
-
-The script is idempotent — re-runs are safe; existing resources are
-skipped, IAM bindings are noop on repeat.
-
----
-
-## 5. Verify
+## 4. Verify
 
 ```bash
 # BigQuery: tables exist
@@ -317,15 +253,6 @@ gcloud firestore databases describe \
 # Firestore: indexes built (state should be READY)
 gcloud firestore indexes composite list \
   --project=$PROJECT_ID --database=internal-auditor-db
-
-# Pub/Sub: topic + subscription exist
-gcloud pubsub topics describe internal-auditor-triggers --project=$PROJECT_ID
-gcloud pubsub subscriptions describe internal-auditor-triggers-sub --project=$PROJECT_ID
-
-# Pub/Sub: orchestrator GSA can subscribe
-gcloud pubsub subscriptions get-iam-policy internal-auditor-triggers-sub \
-  --project=$PROJECT_ID
-# expect: a binding listing GSA_EMAIL under roles/pubsub.subscriber
 
 # Artifact Registry: your repo exists (sanity check; not created by this doc)
 gcloud artifacts repositories describe $AR_REPO \
@@ -347,9 +274,8 @@ terraform init
 terraform apply -var "project_id=my-project"
 ```
 
-Pub/Sub (§4) and the §3b Firestore collection seed are still manual
-either way — Terraform's `internal_auditor` module doesn't cover them
-today.
+The §3b Firestore collection seed is still manual either way —
+Terraform's `internal_auditor` module doesn't cover it today.
 
 ---
 
@@ -360,5 +286,4 @@ today.
 | [`create_bigquery.sql`](./create_bigquery.sql) | Pure DDL — paste into the BQ Console SQL editor.      |
 | [`create_bigquery.sh`](./create_bigquery.sh)   | `bq` CLI wrapper that runs the DDL in Cloud Shell.    |
 | [`create_firestore.sh`](./create_firestore.sh) | gcloud script: DB + composite indexes + TTL.          |
-| [`create_pubsub.sh`](./create_pubsub.sh)       | gcloud script: API enable, topic, subscription, GSA IAM binding (+ optional DLQ). |
 | `DEPLOY.md`                                    | This document.                                        |

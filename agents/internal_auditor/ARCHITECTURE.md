@@ -1,25 +1,21 @@
 # Internal Auditor — how it all connects
 
 A one-page map of the runtime, in plain terms. Think of the system as a
-**compliance audit firm**: a lead auditor picks up requests from an inbox
-tray, dispatches two junior specialists, each specialist signs out a
-private sealed booth to pull data, and the lead files the combined report.
+**compliance audit firm**: a client phones the front desk with an audit
+request and waits on the line; the lead auditor dispatches two junior
+specialists; each specialist signs out a private sealed booth to pull
+data; the lead assembles the report and reads it back on the same call.
 
 ## Runtime flow
 
 ```mermaid
 flowchart TD
-    trigger["Cloud Scheduler cron<br/>or manual gcloud publish"] -->|"{trigger_type, lookback_hours}"| topic
-
-    subgraph pubsub["Pub/Sub — the inbox tray"]
-        topic["Topic: internal-auditor-triggers"] --> sub["Subscription:<br/>internal-auditor-triggers-sub"]
-    end
+    sched["Cloud Scheduler (cron)"] -->|"POST /audit"| svc
+    caller["ad-hoc / other agents"] -->|"POST /audit"| svc
 
     subgraph default["namespace: default"]
-        orch["Orchestrator pod (Pub/Sub subscriber)<br/>Gemini Pro — the lead auditor"]
+        svc["ClusterIP Service<br/>internal-auditor:8080"] --> orch["Orchestrator pod (FastAPI)<br/>Gemini Pro — the lead auditor"]
     end
-
-    sub -->|"pulls the message"| orch
 
     orch -->|"tool call (parallel)"| la["log_analyzer<br/>Gemini Flash"]
     orch -->|"tool call (parallel)"| as["asset_inspector<br/>Gemini Flash"]
@@ -42,7 +38,8 @@ flowchart TD
 
     la -->|"findings"| orch
     as -->|"findings"| orch
-    orch -->|"merged report, keyed by run_id"| logs["Cloud Logging<br/>the records cabinet"]
+    orch -->|"merged report {run_id, ...}"| svc
+    svc -->|"HTTP 200 response"| caller
 ```
 
 ## How one "booth sign-out" works (Model A: per-call claim)
@@ -65,17 +62,19 @@ sequenceDiagram
     K->>P: recycle pod back into the pool
 ```
 
-The claim is created and deleted **once per tool call**. Nothing is a
-web request; nothing routes through a Service — the specialist talks
-straight to the bound pod's IP, then hands it back.
+The claim is created and deleted **once per tool call**. Note the two
+network layers: the *outer* trigger is an HTTP request to the
+orchestrator (`POST /audit`), but the *inner* specialist→MCP hop routes
+through **no Service** — the specialist talks straight to the claimed
+pod's IP, then hands it back.
 
 ## The translation table
 
 | Audit-firm analogy | Real component |
 | --- | --- |
-| The 9am note / a manual note in the inbox | Cloud Scheduler cron, or `gcloud pubsub topics publish` |
-| The **inbox tray** (notes wait here) | **Pub/Sub** topic + subscription |
-| **Lead auditor** checking the tray (not a phone) | the **orchestrator pod** — a Pub/Sub *subscriber* |
+| The recurring 9am call / an ad-hoc caller | Cloud Scheduler cron, or an agent/human hitting `POST /audit` |
+| The **front desk phone line** | the **ClusterIP Service** (`internal-auditor:8080`) |
+| **Lead auditor** answering the phone, reports back on the same call | the **orchestrator pod** — a **FastAPI** service (synchronous) |
 | The lead's experienced brain | **Gemini Pro** (orchestrator model) |
 | Two **junior specialists** | `log_analyzer` + `asset_inspector` tools |
 | The juniors' faster, cheaper brains | **Gemini Flash** (specialist model) |
@@ -86,25 +85,27 @@ straight to the bound pod's IP, then hands it back.
 | The terminal's **ID badge** | **Workload Identity** → GSA with read access |
 | The **government archive** | **GCP** APIs (Cloud Logging, Cloud Asset) |
 | **Signing the booth back in**, cleaner resets it | releasing the claim → pod recycled/replenished |
-| The **records cabinet**, filed by case number | **Cloud Logging**, keyed by `run_id` |
+| The **report read back on the call** | the merged JSON in the HTTP response (keyed by `run_id`) |
 | **Facilities/HR** who set up the lead's office | your team's **Terraform** (deploys the orchestrator) |
 | The company that **built the booth room** | whoever **deployed the warm pools** |
 
 ## Two things this design deliberately does
 
-- **Model A (per-call claim), not a shared Service.** Every tool call
-  gets its own private, sealed, throwaway pod, then returns it. More
+- **Model A (per-call claim), not a shared Service for MCP.** Every tool
+  call gets its own private, sealed, throwaway pod, then returns it. More
   isolation per task; the cost is the claim machinery in `sandbox.py`.
-- **Subscriber, not a web server.** You drop a trigger on the queue and
-  walk away — no holding a connection open while the audit runs, and if
-  the orchestrator restarts, unprocessed triggers wait safely in the
-  subscription.
+- **Synchronous HTTP, in-cluster only.** `POST /audit` runs the audit and
+  returns the merged JSON in the response — so cron, ad-hoc callers, and
+  other agents all get the result directly. It's exposed as a ClusterIP
+  Service (no external load balancer in the path), so there's no LB
+  timeout to truncate a long audit; clients just set a generous timeout.
 
 ## Who owns what (deployment)
 
 | Owned by this repo | Owned outside this repo |
 | --- | --- |
 | Agent code + container image | Orchestrator Deployment (Terraform) |
-| GCP setup scripts (Pub/Sub, later BQ/Firestore) | ServiceAccount + Workload Identity (Terraform) |
-| The runtime env contract (`SANDBOX_*`, `PUBSUB_*`, …) | Cross-namespace SandboxClaim RBAC (Terraform) |
+| GCP setup (BQ/Firestore for the future Policy Agent) | ServiceAccount + Workload Identity (Terraform) |
+| The runtime env contract (`SANDBOX_*`, warm-pool names, Vertex vars) | ClusterIP Service (Terraform) |
+| — | Cross-namespace SandboxClaim RBAC (Terraform) |
 | — | MCP servers + their warm pools (separate) |
