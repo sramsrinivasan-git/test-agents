@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t', '$_IMAGE_NAME',
+    '--build-arg', 'AGENT_NAME=$_AGENT_NAME',
+    '-f', 'Dockerfile.agent',
+    '.'
+  ]
+images:
+- '$_IMAGE_NAME'
