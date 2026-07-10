@@ -56,23 +56,10 @@ variable "memory_limit" {
   default     = "512Mi"
 }
 
-variable "mcp_template_name" {
-  type        = string
-  description = "The SandboxTemplate name for dynamic SandboxClaim creation"
-  default     = ""
-}
-
-variable "mcp_namespace" {
-  type        = string
-  description = "The Kubernetes namespace where the SandboxTemplate resides"
-  default     = "agent-sandbox"
-}
-
-variable "mcp_server_endpoint" {
-  type        = string
-  description = "The internal service endpoint URL of the associated MCP server (if using static services)"
-  default     = ""
-}
+# MCP wiring (which warm pools / templates / namespace an agent uses) is
+# agent-specific and passed through `env_vars`, not baked into the module —
+# agents vary from zero to several MCP servers, so there is no single
+# "the MCP server" for a generic agent spoke.
 
 variable "pro_model" {
   type        = string

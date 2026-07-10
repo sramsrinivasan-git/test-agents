@@ -11,10 +11,9 @@ Implements three of the agents from [`plan.md`](../../plan.md):
 
 Each specialist tool call **claims a fresh sandboxed MCP server pod**
 from a GKE Agent Sandbox warm pool, uses it for that single call, and
-releases it. The orchestrator itself runs as a long-running **FastAPI
-service** (`POST /audit`) — triggered by Cloud Scheduler on a cron and
-by ad-hoc / agent callers — and returns the merged audit JSON in the
-HTTP response.
+releases it. The orchestrator is served by **ADK's own `adk api_server`**
+(the fleet-standard entry point) and invoked over its REST API — by Cloud
+Scheduler on a cron and by ad-hoc / other-agent callers.
 
 New here? [`ARCHITECTURE.md`](ARCHITECTURE.md) explains how everything
 connects in plain language (with diagrams and an audit-firm analogy).
@@ -23,14 +22,14 @@ Not yet implemented (see `src/agent.py` header for the list):
 Agent Behavior Evaluator, Policy Evaluator, Alert Dispatcher,
 BigQuery/Firestore writes, ReAct scratchpad/replan.
 
-Built on **Google ADK** with **Gemini 3 Flash**. Designed to run on
-**GKE with Agent Sandbox enabled**.
+Built on **Google ADK** with **Gemini** (Pro orchestrator / Flash
+specialists). Runs on **GKE with Agent Sandbox enabled**.
 
 ## Layout
 
 Shared, agent-agnostic runtime lives in the top-level `common/` package
-(`common.sandbox`, `common.runner`, `common.serving`, `common.config`).
-This package holds only the audit-specific pieces:
+(`common.sandbox`, `common.runner`, `common.config`). This package holds
+only the audit-specific pieces:
 
 ```
 src/internal_auditor/
@@ -38,41 +37,32 @@ src/internal_auditor/
 ├── log_analyzer.py     log analyzer specialist (claim → inner LLM → release)
 ├── asset_inspector.py  asset inspector specialist (same shape)
 ├── schemas.py          output JSON shapes (single source of truth)
-├── config.py           audit-specific config (model, warm pools, project)
-└── server.py           FastAPI entry: POST /audit → run root_agent → return JSON
+└── config.py           audit-specific config (models, warm pools, project)
 
+__init__.py                  re-exports root_agent so `adk api_server` discovers it
 tests/test_smoke.py          import + shape tests (no cluster, no Gemini)
-Dockerfile + .dockerignore   container image (CMD: internal-auditor-server)
 gcp_setup/                   one-time GCP setup (BQ + Firestore; used by future Policy Agent)
 deployment/terraform/        TF for BQ + Firestore (used later)
 ```
 
-The orchestrator's GKE deployment (Deployment, ServiceAccount + Workload
-Identity, the ClusterIP Service, and the cross-namespace SandboxClaim
-RBAC) is provisioned by a separate Terraform module owned by the platform
-team — this repo does not ship those manifests.
-
-The claim lifecycle, the ADK run loop, the FastAPI app + `/healthz`, and
-the `SANDBOX_*` / `MCP_SERVER_PORT` knobs all come from `common/` and are
-reused by every agent.
+There is **no server / Dockerfile in this package**: the agent is served
+by `adk api_server` and built by the shared root `Dockerfile.agent` +
+`cloudbuild.yaml`, deployed by the `infra/modules/agent-spoke` Terraform
+module. The claim lifecycle, the ADK run loop, and the `SANDBOX_*` /
+`MCP_SERVER_PORT` knobs come from `common/` and are reused by every agent.
 
 ## Run locally with `adk web`
 
-For interactive development, `adk web` imports `root_agent` directly and
-bypasses the FastAPI server entirely - `server.py` is a production entry
-point. `SANDBOX_MODE=local` skips the cluster claim path and points each
-specialist at a static MCP server URL.
-
-Common setup (all variants):
+`adk web` imports `root_agent` directly. `SANDBOX_MODE=local` skips the
+cluster claim path and points each specialist at a static MCP server URL.
 
 ```bash
 uv sync                                       # from repo root
-# Model defaults live in internal_auditor.config (ORCHESTRATOR_MODEL=pro,
-# SPECIALIST_MODEL=flash). Only export overrides if you want to change
-# them per-environment.
+# Models default to gemini-pro-latest / gemini-flash-latest (PRO_MODEL /
+# FLASH_MODEL); override only if needed.
 export GOOGLE_CLOUD_PROJECT=my-project
 export GOOGLE_GENAI_USE_VERTEXAI=true
-export GOOGLE_CLOUD_LOCATION=us-central1
+export GOOGLE_CLOUD_LOCATION=global
 export SANDBOX_MODE=local
 ```
 
@@ -80,16 +70,14 @@ Then pick a variant for the MCP URLs:
 
 **Variant 1 - no MCP at all (fastest smoke test).** Point at unreachable
 URLs; specialists fail fast, orchestrator wraps the errors in `findings`
-and returns the merged JSON. Verifies the agent loop without any MCP
-infrastructure.
+and returns the merged JSON.
 
 ```bash
 export GCP_LOG_ANALYZER_MCP_URL=http://localhost:1/mcp
 export GCP_CLOUD_ASSET_MCP_URL=http://localhost:1/mcp
 ```
 
-**Variant 2 - port-forward to MCP pods.** Talk to real MCP servers
-running in a cluster (skip claim semantics).
+**Variant 2 - port-forward to MCP pods.** Talk to real MCP servers.
 
 ```bash
 kubectl -n agent-sandbox port-forward pod/<a-warmpool-pod> 18080:8080 &     # gcp-log-analyzer
@@ -105,50 +93,64 @@ cd agents/internal_auditor/src   # adk web auto-discovers packages in cwd
 adk web                          # opens http://localhost:8000
 ```
 
-In the ADK web UI, select `internal_auditor` from the agent picker and
-send a message like:
+In the UI, pick `internal_auditor` and send a message like:
 > `trigger_type=on_demand lookback_hours=1 run_id=audit-local-1`
 
-You'll see the orchestrator fan out to `log_analyzer` + `asset_inspector`
-in parallel and return the merged JSON. (`trigger_type` is `scheduled`
-when a Cloud Scheduler cron fires `POST /audit`, `on_demand` for ad-hoc
-callers — the workflow is the same either way.)
+The orchestrator reads `trigger_type` / `lookback_hours` / `run_id` from
+the message text, fans out to both specialists, and returns the merged
+JSON.
 
 ## Deploy to GKE
 
-The orchestrator's GKE workload — Deployment, ServiceAccount + Workload
-Identity, the **ClusterIP Service**, and the cross-namespace SandboxClaim
-RBAC — is provisioned by a **separate Terraform module owned by the
-platform team**, not by this repo. The orchestrator runs in the `default`
-namespace and claims from the warm pools in `agent-sandbox`.
+Deployment is done by the **`infra/modules/agent-spoke`** Terraform
+module (build image → GSA + Workload Identity → ClusterRole for
+SandboxClaims → Deployment running `adk api_server` → ClusterIP Service).
+This agent package ships only code; the module + shared root
+`Dockerfile.agent` / `cloudbuild.yaml` do the rest.
 
-What this repo is responsible for, before/around that Terraform deploy:
+Invoke the module for this agent roughly as:
 
-1. **GCP setup (one-time):** the orchestrator GSA + `roles/aiplatform.user`
-   (Gemini), plus BQ/Firestore for the future Policy Agent. See
-   [`gcp_setup/DEPLOY.md`](gcp_setup/DEPLOY.md). No Pub/Sub — triggering
-   is HTTP.
-2. **Build + push** the orchestrator image to your Artifact Registry repo
-   (the Terraform deploy references this image).
-3. **Runtime config** the Terraform must set on the pod: `SANDBOX_MODE=cluster`,
-   `SANDBOX_NAMESPACE=agent-sandbox`, the two `GCP_*_WARMPOOL` names, and
-   the Vertex AI envs (`GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`,
-   `GOOGLE_GENAI_USE_VERTEXAI`). These match the defaults in `config.py` /
-   `common.config`; share them with whoever owns the module. The pod
-   listens on `:8080` (`/healthz` for the probe, `/audit` for triggers) —
-   expose it as a **ClusterIP** Service (in-cluster only; no external LB
-   in the request path, so no LB timeout).
-4. **Triggers:** point **Cloud Scheduler** at the Service with an HTTP
-   target hitting `POST /audit` on a cron; ad-hoc / other agents call the
-   same endpoint in-cluster:
-   ```bash
-   curl -sS -X POST http://internal-auditor.default.svc.cluster.local:8080/audit \
-     -H 'Content-Type: application/json' \
-     -d '{"trigger_type":"on_demand","lookback_hours":1.0}'
-   ```
+```hcl
+module "internal_auditor" {
+  source     = "../../modules/agent-spoke"
+  agent_name = "internal_auditor"
+  project_id = var.project_id
+  namespace  = "default"
 
-(MCP servers + their warm pools are deployed/owned separately too — not
-by this repo.)
+  # MCP wiring is agent-specific -> passed via env_vars (the module is
+  # MCP-agnostic). This agent claims from TWO warm pools in agent-sandbox.
+  env_vars = {
+    SANDBOX_MODE              = "cluster"
+    MCP_NAMESPACE             = "agent-sandbox"
+    GCP_LOG_ANALYZER_WARMPOOL = "gcp-log-analyzer-warmpool-mcp"
+    GCP_CLOUD_ASSET_WARMPOOL  = "gcp-cloud-asset-warmpool-mcp"
+  }
+}
+```
+
+The module injects the platform-standard vars itself (`PRO_MODEL`,
+`FLASH_MODEL`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`,
+`GOOGLE_GENAI_USE_VERTEXAI`). BQ/Firestore for the future Policy Agent
+are set up separately — see [`gcp_setup/DEPLOY.md`](gcp_setup/DEPLOY.md).
+
+### Calling the deployed agent (ADK REST)
+
+`adk api_server` exposes ADK's standard API. Create a session, then `/run`:
+
+```bash
+BASE=http://internal-auditor-agent-svc.default.svc.cluster.local:80
+curl -sS -X POST $BASE/apps/internal_auditor/users/scheduler/sessions/$(uuidgen)  # create session
+curl -sS -X POST $BASE/run -H 'Content-Type: application/json' -d '{
+  "app_name": "internal_auditor",
+  "user_id": "scheduler",
+  "session_id": "<the session id>",
+  "new_message": {"role": "user",
+    "parts": [{"text": "trigger_type=scheduled lookback_hours=24"}]}
+}'
+```
+
+Cloud Scheduler (HTTP target) and other agents call the same endpoints.
+MCP servers + their warm pools are deployed/owned separately.
 
 ## Tests
 

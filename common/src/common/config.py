@@ -20,8 +20,10 @@ import os
 #             for unit tests.
 SANDBOX_MODE: str = os.environ.get("SANDBOX_MODE", "cluster")
 
-# Namespace the SandboxWarmPool / SandboxClaim resources live in.
-SANDBOX_NAMESPACE: str = os.environ.get("SANDBOX_NAMESPACE", "default")
+# Namespace the SandboxWarmPool / SandboxClaim resources live in. Read from
+# MCP_NAMESPACE (the platform-standard var an agent passes via the
+# agent-spoke module's env_vars), defaulting to `agent-sandbox`.
+SANDBOX_NAMESPACE: str = os.environ.get("MCP_NAMESPACE", "agent-sandbox")
 
 # Port the MCP servers listen on inside their sandbox pods. Matches the
 # Dockerfile EXPOSE on the MCP server image.

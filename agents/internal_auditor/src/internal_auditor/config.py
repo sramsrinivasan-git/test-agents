@@ -10,15 +10,17 @@ from __future__ import annotations
 
 import os
 
-# Per-agent Gemini model selection.
+# Per-agent Gemini model selection. Env var names (PRO_MODEL / FLASH_MODEL)
+# match the platform-standard vars injected by the agent-spoke Terraform
+# module, so every agent selects models the same way.
 # - Orchestrator runs Pro: it coordinates, merges findings, and (with
 #   the future Policy Agent) drives the replan loop - all reasoning-
 #   heavy steps that benefit from the stronger model.
 # - Specialists run Flash: their job is to pick the right MCP tool
 #   and translate the orchestrator's brief into a tool call. Cheaper /
 #   faster suits this well; the LLM isn't doing deep reasoning.
-ORCHESTRATOR_MODEL: str = os.environ.get("ORCHESTRATOR_MODEL", "gemini-3-pro")
-SPECIALIST_MODEL: str = os.environ.get("SPECIALIST_MODEL", "gemini-3-flash")
+ORCHESTRATOR_MODEL: str = os.environ.get("PRO_MODEL", "gemini-pro-latest")
+SPECIALIST_MODEL: str = os.environ.get("FLASH_MODEL", "gemini-flash-latest")
 
 # Default GCP project the MCP tools fall through to when the orchestrator
 # doesn't override `project_id` per-call.

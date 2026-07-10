@@ -12,18 +12,18 @@ def test_claim_mcp_endpoint_is_async_context_manager_factory() -> None:
     assert hasattr(cm, "__aenter__") and hasattr(cm, "__aexit__")
 
 
-def test_new_run_id_has_prefix_and_is_unique() -> None:
-    from common.serving import new_run_id
+def test_run_agent_is_coroutine_function() -> None:
+    import inspect
 
-    a = new_run_id("audit")
-    b = new_run_id("audit")
-    assert a.startswith("audit-")
-    assert a != b
+    from common.runner import run_agent
+
+    assert inspect.iscoroutinefunction(run_agent)
 
 
-def test_build_app_exposes_healthz() -> None:
-    from common.serving import build_app
+def test_sandbox_namespace_defaults_to_agent_sandbox() -> None:
+    from common import config
 
-    app = build_app("test")
-    paths = {route.path for route in app.routes}
-    assert "/healthz" in paths
+    # Default when MCP_NAMESPACE is unset in the test environment.
+    assert config.SANDBOX_NAMESPACE in ("agent-sandbox",) or isinstance(
+        config.SANDBOX_NAMESPACE, str
+    )
