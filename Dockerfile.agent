@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+#The build system passes this in (for example, --build-arg AGENT_NAME=synthetic_data)
+ARG AGENT_NAME
+ENV AGENT_NAME=${AGENT_NAME}
+
+#Copy the specific agent's code into the container
+COPY agents/${AGENT_NAME}/ ./
+
+# Copy and install the shared MCP server package for shared modules
+COPY mcp_servers/${AGENT_NAME}/ ./mcp_servers/${AGENT_NAME}/
+RUN uv pip install --system ./mcp_servers/${AGENT_NAME}
+
+#Install the agent's dependencies
+RUN uv pip install --system .
+
+#Ensure Python can find the src directory modules
+ENV PYTHONPATH=/app/src
+
+#Default command fallback (these are overriden in the Kubernetes YAML for each agent)
+CMD ["python", "-m", "src.agent"]
