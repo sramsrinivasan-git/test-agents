@@ -8,11 +8,10 @@ dependencies = [
     "google-adk>=0.5",
     "google-genai>=0.7",
     "mcp>=1.0",
-    "pydantic>=2.7",
 ]
 
-[project.scripts]
-internal-auditor-server = "internal_auditor.server:main"
+# No [project.scripts]: the agent is served by ADK's own `adk api_server`
+# (the agent-spoke Deployment runs it), not a custom entrypoint.
 
 [tool.uv.sources]
 aaas-common = { workspace = true }

@@ -6,9 +6,8 @@ Reusable, agent-agnostic building blocks:
                       MCP port, claim TTL).
 - `common.sandbox`  - per-call SandboxClaim lifecycle (claim_mcp_endpoint).
 - `common.runner`   - run a one-shot ADK agent turn (run_agent).
-- `common.serving`  - FastAPI scaffolding: build_app (+ /healthz),
-                      new_run_id, serve.
 
-Agent-specific concerns (instructions, output schemas, HTTP request/
-response contracts, which warm pools to use) stay in each agent package.
+Agents are served by ADK's own `adk api_server`, so there is no
+HTTP-serving code here. Agent-specific concerns (instructions, output
+schemas, which warm pools to use) stay in each agent package.
 """

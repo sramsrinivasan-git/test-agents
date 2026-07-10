@@ -1,24 +1,38 @@
+# Shared image recipe for every ADK agent in this repo.
+# Built by cloudbuild.yaml with --build-arg AGENT_NAME=<name>; the
+# agent-spoke Terraform module runs it as `adk api_server ... .`.
+#
+# An agent image contains ONLY the agent package + the shared `common`
+# runtime + their third-party deps. It does NOT bundle MCP servers —
+# agents reach MCP servers over the network (per-call SandboxClaim or a
+# service URL), so MCP server code never ships in the agent image.
 FROM python:3.12-slim
+
 RUN pip install --no-cache-dir uv
 
-WORKDIR /app
-
-#The build system passes this in (for example, --build-arg AGENT_NAME=synthetic_data)
 ARG AGENT_NAME
 ENV AGENT_NAME=${AGENT_NAME}
 
-#Copy the specific agent's code into the container
-COPY agents/${AGENT_NAME}/ ./
+WORKDIR /build
 
-# Copy and install the shared MCP server package for shared modules
-COPY mcp_servers/${AGENT_NAME}/ ./mcp_servers/${AGENT_NAME}/
-RUN uv pip install --system ./mcp_servers/${AGENT_NAME}
+# 1. Shared runtime package first (every agent depends on it; installing
+#    it first means the agent's `aaas-common` dependency is already
+#    satisfied when we install the agent).
+COPY common/ ./common/
+RUN uv pip install --system ./common
 
-#Install the agent's dependencies
-RUN uv pip install --system .
+# 2. The agent package + its declared dependencies.
+COPY agents/${AGENT_NAME}/ ./agent/
+RUN uv pip install --system ./agent
 
-#Ensure Python can find the src directory modules
-ENV PYTHONPATH=/app/src
+# 3. Assemble the ADK "agents directory": one importable agent package
+#    per subfolder. `adk api_server .` (run from /app by the deployment)
+#    discovers ./${AGENT_NAME} as an app named "${AGENT_NAME}".
+RUN mkdir -p /app && cp -r ./agent/src/${AGENT_NAME} /app/${AGENT_NAME} \
+ && rm -rf /build
 
-#Default command fallback (these are overriden in the Kubernetes YAML for each agent)
-CMD ["python", "-m", "src.agent"]
+WORKDIR /app
+
+# Fallback only; the agent-spoke Deployment overrides this with
+# `adk api_server --host 0.0.0.0 --port 8080 .`.
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8080", "."]

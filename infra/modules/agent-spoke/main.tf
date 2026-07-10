@@ -16,9 +16,12 @@ locals {
   service_name = "${replace(var.agent_name, "_", "-")}-agent"
   image_name   = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo}/${local.service_name}:latest"
 
-  # Generate a unique hash representing all files in the Agent directory and the Dockerfile to trigger rebuilds on changes
+  # Generate a unique hash over everything baked into the image so a change
+  # triggers a rebuild: the agent directory, the shared `common` package
+  # (every agent depends on it), and the Dockerfile.
   agent_dir_hash = sha1(join("", concat(
     [for f in fileset("${path.module}/../../../agents/${var.agent_name}", "**") : filemd5("${path.module}/../../../agents/${var.agent_name}/${f}")],
+    [for f in fileset("${path.module}/../../../common", "**") : filemd5("${path.module}/../../../common/${f}")],
     [filemd5("${path.module}/../../../Dockerfile.agent")]
   )))
 }
@@ -128,7 +131,11 @@ resource "google_service_account_iam_member" "workload_identity_binding" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${kubernetes_service_account.agent_ksa.metadata[0].name}]"
 }
 
-# 5a. Grant Kubernetes RBAC permissions to create/get/watch/delete SandboxClaims
+# 5a. Grant Kubernetes RBAC permissions to manage SandboxClaims and read
+#     the bound Sandbox. The k8s-agent-sandbox client resolves the pod IP
+#     from the Sandbox object's status, so read on `sandboxes` is required
+#     in addition to write on `sandboxclaims` — without it, claiming
+#     succeeds but pod-IP resolution 403s and every tool call fails.
 resource "kubernetes_cluster_role" "agent_sandbox_role" {
   metadata {
     name = "${local.service_name}-sandbox-claimer"
@@ -137,6 +144,11 @@ resource "kubernetes_cluster_role" "agent_sandbox_role" {
     api_groups = ["extensions.agents.x-k8s.io"]
     resources  = ["sandboxclaims"]
     verbs      = ["create", "get", "list", "watch", "update", "patch", "delete"]
+  }
+  rule {
+    api_groups = ["agents.x-k8s.io"]
+    resources  = ["sandboxes"]
+    verbs      = ["get", "list", "watch"]
   }
 }
 
@@ -193,7 +205,9 @@ resource "kubernetes_deployment" "agent_deployment" {
           image             = local.image_name
           image_pull_policy = "Always"
           
-          # Runs the ADK FastAPI server on port 8080
+          # Serve the agent via ADK's standard REST server on port 8080.
+          # The image's WORKDIR is /app, which contains the discoverable
+          # agent package (see Dockerfile.agent), so `.` resolves to it.
           command = ["adk", "api_server", "--host", "0.0.0.0", "--port", "8080", "."]
 
           port {
@@ -219,23 +233,14 @@ resource "kubernetes_deployment" "agent_deployment" {
             value = var.flash_model
           }
           env {
-            name  = "MCP_SERVER_ENDPOINT"
-            value = var.mcp_server_endpoint
-          }
-          env {
-            name  = "MCP_TEMPLATE_NAME"
-            value = var.mcp_template_name
-          }
-          env {
-            name  = "MCP_NAMESPACE"
-            value = var.mcp_namespace
-          }
-          env {
             name  = "GOOGLE_CLOUD_PROJECT"
             value = var.project_id
           }
 
-          # Custom agent-specific environment variables
+          # MCP wiring is agent-specific — an agent may claim from zero, one,
+          # or several sandbox warm pools, in whatever namespace. The module
+          # stays MCP-agnostic; each agent passes its own MCP config (pool
+          # names, MCP_NAMESPACE, etc.) through `env_vars` below.
           dynamic "env" {
             for_each = var.env_vars
             content {

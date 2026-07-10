@@ -7,10 +7,11 @@ How to create the GCP resources the Internal Auditor needs:
 - **Firestore** database + indexes + TTL for ground-truth precedents
   (§3). Used by the future Policy Agent.
 
-> The orchestrator is triggered over **HTTP** (`POST /audit`) — by Cloud
-> Scheduler on a cron and by ad-hoc / agent callers — so there is no
-> Pub/Sub topic to create for triggering. Both stores below are used by
-> the *future* Policy Agent, not the orchestrator as it stands today.
+> The orchestrator is served by **`adk api_server`** and triggered over
+> its REST API (`POST /run`) — by Cloud Scheduler on a cron and by ad-hoc
+> / agent callers — so there is no Pub/Sub topic to create for triggering.
+> Both stores below are used by the *future* Policy Agent, not the
+> orchestrator as it stands today.
 
 > **Artifact Registry is assumed to already exist** in your project as
 > a Docker repo. Image refs in this repo look like

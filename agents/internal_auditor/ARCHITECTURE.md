@@ -10,11 +10,11 @@ data; the lead assembles the report and reads it back on the same call.
 
 ```mermaid
 flowchart TD
-    sched["Cloud Scheduler (cron)"] -->|"POST /audit"| svc
-    caller["ad-hoc / other agents"] -->|"POST /audit"| svc
+    sched["Cloud Scheduler (cron)"] -->|"POST /run"| svc
+    caller["ad-hoc / other agents"] -->|"POST /run"| svc
 
     subgraph default["namespace: default"]
-        svc["ClusterIP Service<br/>internal-auditor:8080"] --> orch["Orchestrator pod (FastAPI)<br/>Gemini Pro — the lead auditor"]
+        svc["ClusterIP Service<br/>internal-auditor-agent-svc:80"] --> orch["Orchestrator pod (adk api_server)<br/>Gemini Pro — the lead auditor"]
     end
 
     orch -->|"tool call (parallel)"| la["log_analyzer<br/>Gemini Flash"]
@@ -39,7 +39,7 @@ flowchart TD
     la -->|"findings"| orch
     as -->|"findings"| orch
     orch -->|"merged report {run_id, ...}"| svc
-    svc -->|"HTTP 200 response"| caller
+    svc -->|"ADK run events (final = report)"| caller
 ```
 
 ## How one "booth sign-out" works (Model A: per-call claim)
@@ -63,8 +63,8 @@ sequenceDiagram
 ```
 
 The claim is created and deleted **once per tool call**. Note the two
-network layers: the *outer* trigger is an HTTP request to the
-orchestrator (`POST /audit`), but the *inner* specialist→MCP hop routes
+network layers: the *outer* trigger is an ADK REST call to the
+orchestrator (`POST /run`), but the *inner* specialist→MCP hop routes
 through **no Service** — the specialist talks straight to the claimed
 pod's IP, then hands it back.
 
@@ -72,9 +72,9 @@ pod's IP, then hands it back.
 
 | Audit-firm analogy | Real component |
 | --- | --- |
-| The recurring 9am call / an ad-hoc caller | Cloud Scheduler cron, or an agent/human hitting `POST /audit` |
-| The **front desk phone line** | the **ClusterIP Service** (`internal-auditor:8080`) |
-| **Lead auditor** answering the phone, reports back on the same call | the **orchestrator pod** — a **FastAPI** service (synchronous) |
+| The recurring 9am call / an ad-hoc caller | Cloud Scheduler cron, or an agent/human hitting ADK's `POST /run` |
+| The **front desk phone line** | the **ClusterIP Service** (`internal-auditor-agent-svc:80`) |
+| **Lead auditor** answering the phone, reports back on the same call | the **orchestrator pod** — served by **`adk api_server`** (synchronous) |
 | The lead's experienced brain | **Gemini Pro** (orchestrator model) |
 | Two **junior specialists** | `log_analyzer` + `asset_inspector` tools |
 | The juniors' faster, cheaper brains | **Gemini Flash** (specialist model) |
@@ -94,18 +94,19 @@ pod's IP, then hands it back.
 - **Model A (per-call claim), not a shared Service for MCP.** Every tool
   call gets its own private, sealed, throwaway pod, then returns it. More
   isolation per task; the cost is the claim machinery in `sandbox.py`.
-- **Synchronous HTTP, in-cluster only.** `POST /audit` runs the audit and
-  returns the merged JSON in the response — so cron, ad-hoc callers, and
-  other agents all get the result directly. It's exposed as a ClusterIP
-  Service (no external load balancer in the path), so there's no LB
-  timeout to truncate a long audit; clients just set a generous timeout.
+- **Served by `adk api_server`, in-cluster only.** ADK's standard REST
+  server runs the audit synchronously and returns the result as run
+  events — so cron, ad-hoc callers, and other agents all get it directly,
+  the same way they call every other agent in the fleet. Exposed as a
+  ClusterIP Service (no external load balancer in the path), so there's no
+  LB timeout to truncate a long audit; clients just set a generous timeout.
 
 ## Who owns what (deployment)
 
-| Owned by this repo | Owned outside this repo |
+| Owned by this repo | Owned by the `agent-spoke` Terraform module |
 | --- | --- |
-| Agent code + container image | Orchestrator Deployment (Terraform) |
-| GCP setup (BQ/Firestore for the future Policy Agent) | ServiceAccount + Workload Identity (Terraform) |
-| The runtime env contract (`SANDBOX_*`, warm-pool names, Vertex vars) | ClusterIP Service (Terraform) |
-| — | Cross-namespace SandboxClaim RBAC (Terraform) |
+| Agent code (`agents/internal_auditor`) | Build (root `Dockerfile.agent` + `cloudbuild.yaml`) |
+| Shared runtime (`common/`) | GSA + Vertex IAM + Workload Identity + KSA |
+| The env contract passed via `env_vars` (`SANDBOX_MODE`, `MCP_NAMESPACE`, warm-pool names) | Deployment (`adk api_server`) + ClusterIP Service |
+| BQ/Firestore setup (future Policy Agent) | ClusterRole/Binding for SandboxClaims + Sandbox reads |
 | — | MCP servers + their warm pools (separate) |
